@@ -1933,11 +1933,13 @@ static bool snapObject(Scene *scene, short snap_mode, ARegion *ar, Object *ob, f
 
 static bool snapObjectsRay(Scene *scene, short snap_mode, Base *base_act, View3D *v3d, ARegion *ar, Object *obedit,
                            Object **r_ob, float r_obmat[4][4],
-                           const float ray_start[3], const float ray_normal[3], float *r_ray_dist,
+                           const float ray_start[3], const float ray_normal[3], const float ray_origin[3],
+                           float *r_ray_dist,
                            const float mval[2], float *r_dist_px, float r_loc[3], float r_no[3], SnapMode mode)
 {
 	Base *base;
 	bool retval = false;
+	bool setmanip = v3d->twflag & V3D_SET_MANIPULATOR;
 
 	if (mode == SNAP_ALL && obedit) {
 		Object *ob = obedit;
@@ -2041,7 +2043,7 @@ bool snapObjectsRayEx(Scene *scene, Base *base_act, View3D *v3d, ARegion *ar, Ob
 {
 	return snapObjectsRay(scene, snap_mode, base_act, v3d, ar, obedit,
 	                      r_ob, r_obmat,
-	                      ray_start, ray_normal, r_ray_dist,
+	                      ray_start, ray_normal, ray_start, r_ray_dist,
 	                      mval, r_dist_px, r_loc, r_no, mode);
 }
 
@@ -2128,7 +2130,7 @@ static bool peelDerivedMesh(Object *ob, DerivedMesh *dm, float obmat[4][4],
 		 * */
 		if (totface > 16) {
 			struct BoundBox *bb = BKE_object_boundbox_get(ob);
-			test = BKE_boundbox_ray_hit_check(bb, ray_start_local, ray_normal_local);
+			test = BKE_boundbox_ray_hit_check(bb, ray_start_local, ray_normal_local, NULL);
 		}
 		
 		if (test == 1) {

@@ -2961,11 +2961,6 @@ static int border_apply(bContext *C, wmOperator *op)
 	if (!border_apply_rect(C, op, false))
 		return 0;
 	
-	/* XXX weak; border should be configured for this without reading event types */
-	if (RNA_struct_find_property(op->ptr, "gesture_mode")) {
-		RNA_int_set(op->ptr, "gesture_mode", gesture_mode);
-	}
-
 	retval = op->type->exec(C, op);
 	OPERATOR_RETVAL_CHECK(retval);
 
@@ -2997,6 +2992,7 @@ int WM_border_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	else {
 		if (win->gesture_level > WM_GESTURE_CROSS_RECT) return OPERATOR_CANCELLED;	
 		op->customdata = WM_gesture_new(C, event, WM_GESTURE_CROSS_RECT);
+	}
 
 	/* add modal handler */
 	WM_event_add_modal_handler(C, op);
