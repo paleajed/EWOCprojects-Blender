@@ -582,7 +582,7 @@ Tex *add_texture(Main *bmain, const char *name)
 {
 	Tex *tex;
 
-	tex = BKE_libblock_alloc(&bmain->tex, ID_TE, name);
+	tex = BKE_libblock_alloc(bmain, ID_TE, name);
 	
 	default_tex(tex);
 	
@@ -1121,7 +1121,7 @@ void set_current_material_texture(Material *ma, Tex *newtex)
 	}
 }
 
-int has_current_material_texture(Material *ma)
+bool has_current_material_texture(Material *ma)
 {
 	bNode *node;
 

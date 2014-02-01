@@ -422,6 +422,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
 
 static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 {
+	Scene *scene = sc->scene;
 	SpaceImage *sima = (SpaceImage *)sa->spacedata.first;
 	
 	/* context changes */
@@ -533,7 +534,7 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 		}
 		case NC_OBJECT:
 		{
-			Object *ob = (Object *)wmn->reference;
+			Object *ob = OBACT;
 			switch (wmn->data) {
 				case ND_TRANSFORM:
 					/* Adapt proportional mode preselection */
@@ -546,9 +547,11 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					}
 					break;
 				case ND_MODIFIER:
-					if (ob && (ob->mode & OB_MODE_EDIT) && sima->lock && (sima->flag & SI_DRAWSHADOW)) {
-						ED_area_tag_refresh(sa);
-						ED_area_tag_redraw(sa);
+					if (ob == (Object *)wmn->reference && (ob->mode & OB_MODE_EDIT)) {
+						if (sima->lock && (sima->flag & SI_DRAWSHADOW)) {
+							ED_area_tag_refresh(sa);
+							ED_area_tag_redraw(sa);
+						}
 					}
 					break;
 			}

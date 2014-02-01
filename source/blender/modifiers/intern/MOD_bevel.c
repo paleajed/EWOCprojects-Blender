@@ -103,7 +103,7 @@ static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
 	BMIter iter;
 	BMEdge *e;
 	BMVert *v;
-	float weight;
+	float weight, weight2;
 	int vgroup = -1;
 	MDeformVert *dvert = NULL;
 	BevelModifierData *bmd = (BevelModifierData *) md;
@@ -112,18 +112,18 @@ static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
 	const bool do_clamp = !(bmd->flags & MOD_BEVEL_OVERLAP_OK);
 
 	bm = DM_to_bmesh(dm, true);
+	if ((bmd->lim_flags & MOD_BEVEL_VGROUP) && bmd->defgrp_name[0])
+		modifier_get_vgroup(ob, dm, bmd->defgrp_name, &dvert, &vgroup);
 
 	if (vertex_only) {
-		if ((bmd->lim_flags & MOD_BEVEL_VGROUP) && bmd->defgrp_name[0]) {
-			modifier_get_vgroup(ob, dm, bmd->defgrp_name, &dvert, &vgroup);
-		}
 		BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
 			if (!BM_vert_is_manifold(v))
 				continue;
 			if (vgroup != -1) {
-				/* Is it safe to assume bmesh indices and dvert array line up?? */
 				weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(v), vgroup);
-				if (weight <= 0.0f)
+				/* Check is against 0.5 rather than != 0.0 because cascaded bevel modifiers will
+				 * interpolate weights for newly created vertices, and may cause unexpected "selection" */
+				if (weight < 0.5f)
 					continue;
 			}
 			BM_elem_flag_enable(v, BM_ELEM_TAG);
@@ -151,6 +151,12 @@ static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
 					if (weight == 0.0f)
 						continue;
 				}
+				else if (vgroup != -1) {
+					weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v1), vgroup);
+					weight2 = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v2), vgroup);
+					if (weight < 0.5f || weight2 < 0.5f)
+						continue;
+				}
 				BM_elem_flag_enable(e, BM_ELEM_TAG);
 				BM_elem_flag_enable(e->v1, BM_ELEM_TAG);
 				BM_elem_flag_enable(e->v2, BM_ELEM_TAG);
@@ -163,7 +169,7 @@ static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
 	              vertex_only, bmd->lim_flags & MOD_BEVEL_WEIGHT, do_clamp,
 	              dvert, vgroup);
 
-	result = CDDM_from_bmesh(bm, TRUE);
+	result = CDDM_from_bmesh(bm, true);
 
 	BLI_assert(bm->vtoolflagpool == NULL &&
 	           bm->etoolflagpool == NULL &&
