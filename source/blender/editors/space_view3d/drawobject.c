@@ -49,6 +49,7 @@
 #include "BKE_anim.h"  /* for the where_on_path function */
 #include "BKE_armature.h"
 #include "BKE_camera.h"
+#include "BKE_ccg.h"
 #include "BKE_constraint.h"  /* for the get_constraint_target function */
 #include "BKE_curve.h"
 #include "BKE_DerivedMesh.h"
@@ -69,6 +70,7 @@
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
+#include "BKE_subsurf.h"
 #include "BKE_unit.h"
 #include "BKE_tracking.h"
 
@@ -554,7 +556,7 @@ void drawaxes(float size, char drawtype)
 static void draw_empty_image(Object *ob, const short dflag, const unsigned char ob_wire_col[4])
 {
 	Image *ima = (Image *)ob->data;
-	ImBuf *ibuf = BKE_image_acquire_ibuf(ima, ob->iuser, NULL);
+	ImBuf *ibuf = ima ? BKE_image_acquire_ibuf(ima, NULL, NULL) : NULL;
 
 	float scale, ofs_x, ofs_y, sca_x, sca_y;
 	int ima_x, ima_y;
@@ -1989,7 +1991,7 @@ static void drawSelectedVertices(DerivedMesh *dm, Mesh *me)
 
 	/* TODO define selected color */
 	unsigned char base_col[3] = {0x0, 0x0, 0x0};
-	unsigned char sel_col[3] = {0xd8, 0xb8, 0x0};
+	unsigned char sel_col[4] = {0xd8, 0xb8, 0x0};
 	unsigned char act_col[3] = {0xff, 0xff, 0xff};
 
 	data.mvert = me->mvert;
@@ -2136,6 +2138,46 @@ static void draw_dm_vert_normals(BMEditMesh *em, Scene *scene, Object *ob, Deriv
 	glEnd();
 }
 
+/* Draw normal on preselected face or preselected vert*/
+static void draw_presel_normal(BMEditMesh *em, DerivedMesh *dm, Scene *scene, Object *ob)
+{
+	GHashIterator *iter;
+	BMFace *efa = NULL;
+	BMVert *eve = NULL;
+	drawDMNormal_userData data;
+	unsigned char sel_col[4], nosel_col[4];
+	unsigned char *normal_col;
+		
+	UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+
+	data.bm = em->bm;
+	data.normalsize = scene->toolsettings->normalsize;
+
+	calcDrawDMNormalScale(ob, &data);
+	
+	if (BLI_ghash_size(em->presel_faces) == 1) {
+		iter = BLI_ghashIterator_new(em->presel_faces);
+		efa = BLI_ghashIterator_getKey(iter);
+		BLI_ghashIterator_free(iter);
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT))
+			normal_col = sel_col;
+		else
+			normal_col = nosel_col;
+		dm->drawPreselFaceNormal(efa->head.index, dm, draw_dm_face_normals__mapFunc, normal_col, &data);
+	}
+	else if (BLI_ghash_size(em->presel_verts) == 1) {
+		iter = BLI_ghashIterator_new(em->presel_verts);
+		eve = BLI_ghashIterator_getKey(iter);
+		BLI_ghashIterator_free(iter);
+		if (BM_elem_flag_test(eve, BM_ELEM_SELECT))
+			normal_col = sel_col;
+		else
+			normal_col = nosel_col;
+		dm->drawPreselVertNormal(eve->head.index, dm, draw_dm_vert_normals__mapFunc, normal_col, &data);
+	}	
+}
+
 /* Draw verts with color set based on selection */
 static void draw_dm_verts__mapFunc(void *userData, int index, const float co[3],
                                    const float UNUSED(no_f[3]), const short UNUSED(no_s[3]))
@@ -2201,11 +2243,31 @@ static void draw_dm_verts(BMEditMesh *em, DerivedMesh *dm, const char sel, BMVer
 	/* view-aligned matrix */
 	mul_m4_m4m4(data.imat, rv3d->viewmat, em->ob->obmat);
 	invert_m4(data.imat);
-
+	
+	glEnable(GL_BLEND);
 	bglBegin(GL_POINTS);
 	dm->foreachMappedVert(dm, draw_dm_verts__mapFunc, &data, DM_FOREACH_NOP);
 	bglEnd();
+	glDisable(GL_BLEND);
 }
+
+/* Draw preselected vertices */
+static void draw_presel_verts(BMEditMesh *em, DerivedMesh *dm)
+{
+	unsigned char sel_col[4], nosel_col[4];
+		
+	UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+	
+	glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE) + 1);
+	
+	glDisable(GL_DEPTH_TEST);
+	dm->drawPreselVerts(em, dm, sel_col, nosel_col);
+	glEnable(GL_DEPTH_TEST);
+	
+	glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE));
+}
+
 
 /* Draw edges with color set based on selection */
 static DMDrawOption draw_dm_edges_sel__setDrawOptions(void *userData, int index)
@@ -2265,6 +2327,48 @@ static DMDrawOption draw_dm_edges__setDrawOptions(void *userData, int index)
 static void draw_dm_edges(BMEditMesh *em, DerivedMesh *dm)
 {
 	dm->drawMappedEdges(dm, draw_dm_edges__setDrawOptions, em->bm);
+}
+
+/* Draw preselected edges */
+static void draw_presel_edges(BMEditMesh *em, DerivedMesh *dm)
+{
+	unsigned char sel_col[4], nosel_col[4];
+	float lwidth;
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);	
+	
+	glGetFloatv(GL_LINE_WIDTH, &lwidth);
+	glLineWidth(lwidth + 2);
+	
+	glDisable(GL_DEPTH_TEST);
+	dm->drawPreselEdges(em, dm, sel_col, nosel_col);
+	glEnable(GL_DEPTH_TEST);
+	
+	glLineWidth(lwidth);
+}
+
+/* Draw preselected vert gradients */
+static void draw_presel_edges_interp(BMEditMesh *em, DerivedMesh *dm)
+{
+	GHashIterator *iter;
+	BMVert *eve;
+	unsigned char sel_col[4], nosel_col[4];
+	unsigned char *conn_col;
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);	
+	
+	if (BLI_ghash_size(em->presel_verts) == 1) {
+		iter = BLI_ghashIterator_new(em->presel_verts);
+		eve = BLI_ghashIterator_getKey(iter);
+		BLI_ghashIterator_free(iter);
+		if (BM_elem_flag_test(eve, BM_ELEM_SELECT))
+			conn_col = sel_col;
+		else
+			conn_col = nosel_col;
+		dm->drawPreselEdgesInterp(eve, em, dm, conn_col);
+	}	
 }
 
 /* Draw edges with color interpolated based on selection */
@@ -2460,6 +2564,28 @@ static void draw_dm_faces_sel(BMEditMesh *em, DerivedMesh *dm, unsigned char *ba
 
 	dm->drawMappedFaces(dm, draw_dm_faces_sel__setDrawOptions, GPU_enable_material, draw_dm_faces_sel__compareDrawOptions, &data, 0);
 }
+
+/* Draw preselected faces */
+static void draw_presel_faces(BMEditMesh *em, DerivedMesh *dm)
+{
+	unsigned char sel_col[4], nosel_col[4];
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+	
+	dm->drawPreselFaces(em, dm, sel_col, nosel_col);
+}
+
+/* Draw proportional preselected faces */
+static void draw_presel_prop_faces(BMEditMesh *em, DerivedMesh *dm, bool occluded, bool selected)
+{
+	unsigned char prop_col[4];
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
+	
+	dm->drawPreselPropFaces(em, dm, prop_col, occluded, selected);
+}
+
 
 static DMDrawOption draw_dm_creases__setDrawOptions(void *userData, int index)
 {
@@ -2681,7 +2807,7 @@ static void draw_em_fancy_edges(BMEditMesh *em, Scene *scene, View3D *v3d,
 				draw_dm_edges(em, cageDM);
 			}
 		}
-
+		
 		if (pass == 0) {
 			glDisable(GL_BLEND);
 			glEnable(GL_DEPTH_TEST);
@@ -3181,6 +3307,12 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 		}
 	}
 
+	/* draw preselection highlighting */
+	if (scene->toolsettings->use_prop_presel)
+		draw_presel_prop_faces(em, cageDM, v3d->flag & V3D_ZBUF_SELECT, 0);
+	if (scene->toolsettings->use_presel)
+		draw_presel_faces(em, cageDM);
+
 	if ((me->drawflag & ME_DRAWFACES) && (use_occlude_wire == false)) {  /* transp faces */
 		unsigned char col1[4], col2[4], col3[4];
 #ifdef WITH_FREESTYLE
@@ -3236,6 +3368,12 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 
 	}
 
+	/* draw preselection highlighting */
+	if (scene->toolsettings->use_prop_presel)
+		draw_presel_prop_faces(em, cageDM, v3d->flag & V3D_ZBUF_SELECT, 1);
+	if (scene->toolsettings->use_presel)
+		draw_presel_faces(em, cageDM);
+
 	/* here starts all fancy draw-extra over */
 	if ((me->drawflag & ME_DRAWEDGES) == 0 && check_object_draw_texture(scene, v3d, dt)) {
 		/* we are drawing textures and 'ME_DRAWEDGES' is disabled, don't draw any edges */
@@ -3285,11 +3423,19 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 		}
 
 		draw_em_fancy_edges(em, scene, v3d, me, cageDM, 0, eed_act);
+		draw_em_fancy_edges(em, scene, v3d, me, cageDM, 1, eed_act);
 	}
 
 	{
 		draw_em_fancy_verts(scene, v3d, ob, em, cageDM, eve_act, rv3d);
 
+		if (scene->toolsettings->use_presel) {
+			/* draw preselection highlighting */
+			draw_presel_edges(em, cageDM);
+			draw_presel_edges_interp(em, cageDM);
+			draw_presel_verts(em, cageDM);
+		}
+		
 		if (me->drawflag & ME_DRAWNORMALS) {
 			UI_ThemeColor(TH_NORMAL);
 			draw_dm_face_normals(em, scene, ob, cageDM);
@@ -3299,6 +3445,12 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 			draw_dm_vert_normals(em, scene, ob, cageDM);
 		}
 
+		if (scene->toolsettings->use_presel) {
+			/* draw preselection highlighting */
+			if (scene->toolsettings->show_presel_normals)
+				draw_presel_normal(em, cageDM, scene, ob);
+		}
+		
 		if ((me->drawflag & (ME_DRAWEXTRA_EDGELEN |
 		                     ME_DRAWEXTRA_FACEAREA |
 		                     ME_DRAWEXTRA_FACEANG |
@@ -3801,9 +3953,16 @@ static void drawDispListsolid(ListBase *lb, Object *ob, const short dflag,
 
 	glEnable(GL_LIGHTING);
 	glEnableClientState(GL_VERTEX_ARRAY);
-
+	
+	
 	if (ob->type == OB_MBALL) {  /* mball always smooth shaded */
+		if (ob->transflag & OB_NEG_SCALE) glFrontFace(GL_CW);
+		else glFrontFace(GL_CCW);
 		glShadeModel(GL_SMOOTH);
+	}
+	else {
+		if (ob->transflag & OB_NEG_SCALE) glFrontFace(GL_CCW);
+		else glFrontFace(GL_CW);
 	}
 	
 	dl = lb->first;
@@ -3922,8 +4081,6 @@ static bool drawCurveDerivedMesh(Scene *scene, View3D *v3d, RegionView3D *rv3d, 
 		return true;
 	}
 
-	glFrontFace((ob->transflag & OB_NEG_SCALE) ? GL_CW : GL_CCW);
-
 	if (dt > OB_WIRE && dm->getNumTessFaces(dm)) {
 		int glsl = draw_glsl_material(scene, ob, v3d, dt);
 		GPU_begin_object_materials(v3d, rv3d, scene, ob, glsl, NULL);
@@ -3962,13 +4119,6 @@ static bool drawDispList_nobackface(Scene *scene, View3D *v3d, RegionView3D *rv3
 
 	if (drawCurveDerivedMesh(scene, v3d, rv3d, base, dt) == false) {
 		return false;
-	}
-
-	if (ob->type == OB_MBALL) {
-		glFrontFace((ob->transflag & OB_NEG_SCALE) ? GL_CW : GL_CCW);
-	}
-	else {
-		glFrontFace((ob->transflag & OB_NEG_SCALE) ? GL_CCW : GL_CW);
 	}
 
 	switch (ob->type) {

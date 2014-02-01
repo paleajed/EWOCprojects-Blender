@@ -29,8 +29,10 @@ set(INC
 	../blenkernel
 	../blenlib
 	../blenloader
+	../bmesh
 	../compositor
 	../editors/include
+	../editors/space_view3d
 	../gpu
 	../imbuf
 	../makesdna

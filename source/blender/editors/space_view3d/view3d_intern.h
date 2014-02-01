@@ -48,6 +48,7 @@ struct bMotionPath;
 struct bPoseChannel;
 struct bScreen;
 struct Mesh;
+struct wmEvent;
 struct wmNDOFMotionData;
 struct wmOperatorType;
 struct wmWindowManager;
@@ -181,6 +182,8 @@ void VIEW3D_OT_select_border(struct wmOperatorType *ot);
 void VIEW3D_OT_select_lasso(struct wmOperatorType *ot);
 void VIEW3D_OT_select_menu(struct wmOperatorType *ot);
 
+void VIEW3D_OT_preselect(struct wmOperatorType *ot);
+
 void VIEW3D_OT_smoothview(struct wmOperatorType *ot);
 void VIEW3D_OT_camera_to_view(struct wmOperatorType *ot);
 void VIEW3D_OT_camera_to_view_selected(struct wmOperatorType *ot);
@@ -220,7 +223,7 @@ void ED_view3d_cameracontrol_update(
 void ED_view3d_cameracontrol_release(
         struct View3DCameraControl *vctrl,
         const bool restore);
-Object *ED_view3d_cameracontrol_object_get(
+struct Object *ED_view3d_cameracontrol_object_get(
         struct View3DCameraControl *vctrl);
 
 /* view3d_toolbar.c */

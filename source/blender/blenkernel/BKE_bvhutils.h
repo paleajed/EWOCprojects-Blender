@@ -95,7 +95,7 @@ BVHTree *bvhtree_from_mesh_verts(struct BVHTreeFromMesh *data, struct DerivedMes
  * 
  * free_bvhtree_from_mesh should be called when the tree is no longer needed.
  */
-BVHTree *bvhtree_from_mesh_faces(struct BVHTreeFromMesh *data, struct DerivedMesh *mesh, float epsilon, int tree_type, int axis);
+BVHTree *bvhtree_from_mesh_faces(struct BVHTreeFromMesh *data, struct DerivedMesh *mesh, float epsilon, int tree_type, int axis, bool nosel);
 
 BVHTree *bvhtree_from_mesh_edges(struct BVHTreeFromMesh *data, struct DerivedMesh *mesh, float epsilon, int tree_type, int axis);
 

@@ -277,6 +277,8 @@ const unsigned char *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colo
 					cp = ts->group_active; break;
 				case TH_TRANSFORM:
 					cp = ts->transform; break;
+				case TH_TRANSFORM_SET:
+					cp = ts->transform_set; break;
 				case TH_VERTEX:
 					cp = ts->vertex; break;
 				case TH_VERTEX_SELECT:
@@ -345,6 +347,12 @@ const unsigned char *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colo
 					cp = ts->act_spline; break;
 				case TH_LASTSEL_POINT:
 					cp = ts->lastsel_point; break;
+				case TH_PRESEL_SELECT:
+					cp = ts->presel_select; break;
+				case TH_PRESEL_NOSELECT:
+					cp = ts->presel_noselect; break;
+				case TH_PRESEL_PROP:
+					cp = ts->presel_prop; break;
 				case TH_HANDLE_FREE:
 					cp = ts->handle_free; break;
 				case TH_HANDLE_AUTO:
@@ -803,6 +811,7 @@ void ui_theme_init_default(void)
 	rgba_char_args_set(btheme->tv3d.group,      8, 48, 8, 255);
 	rgba_char_args_set(btheme->tv3d.group_active, 85, 187, 85, 255);
 	rgba_char_args_set(btheme->tv3d.transform, 0xff, 0xff, 0xff, 255);
+	rgba_char_args_set(btheme->tv3d.transform_set, 0, 0, 0, 255);
 	rgba_char_args_set(btheme->tv3d.vertex, 0, 0, 0, 255);
 	rgba_char_args_set(btheme->tv3d.vertex_select, 255, 133, 0, 255);
 	rgba_char_args_set(btheme->tv3d.vertex_unreferenced, 0, 0, 0, 255);
@@ -855,6 +864,10 @@ void ui_theme_init_default(void)
 	rgba_char_args_set(btheme->tv3d.act_spline, 0xdb, 0x25, 0x12, 255);
 	rgba_char_args_set(btheme->tv3d.lastsel_point,  0xff, 0xff, 0xff, 255);
 
+	rgba_char_args_set(btheme->tv3d.presel_select,  0xff, 0xdc, 0x59, 100);
+	rgba_char_args_set(btheme->tv3d.presel_noselect,  0x87, 0x81, 0xff, 100);
+	rgba_char_args_set(btheme->tv3d.presel_prop,  0xff, 0xab, 0x00, 255);
+	
 	rgba_char_args_set(btheme->tv3d.bone_solid, 200, 200, 200, 255);
 	/* alpha 80 is not meant editable, used for wire+action draw */
 	rgba_char_args_set(btheme->tv3d.bone_pose, 80, 200, 255, 80);
@@ -967,6 +980,11 @@ void ui_theme_init_default(void)
 	rgba_char_args_set(btheme->tima.face,   255, 255, 255, 10);
 	rgba_char_args_set(btheme->tima.face_select, 255, 133, 0, 60);
 	rgba_char_args_set(btheme->tima.editmesh_active, 255, 255, 255, 128);
+	
+	rgba_char_args_set(btheme->tima.presel_select,  0xff, 0xdc, 0x59, 125);
+	rgba_char_args_set(btheme->tima.presel_noselect,  0xff, 0x00, 0x2d, 125);
+	rgba_char_args_set(btheme->tima.presel_prop,  0xff, 0xe1, 0x00, 200);
+	
 	rgba_char_args_set_fl(btheme->tima.preview_back,    0.45, 0.45, 0.45, 1.0);
 	rgba_char_args_set_fl(btheme->tima.preview_stitch_face, 0.5, 0.5, 0.0, 0.2);
 	rgba_char_args_set_fl(btheme->tima.preview_stitch_edge, 1.0, 0.0, 1.0, 0.2);
@@ -2356,6 +2374,33 @@ void init_userdef_do_versions(void)
 // XXX	space_set_commmandline_options();
 	/* this timer uses U */
 // XXX	reset_autosave();
+
+
+	{
+		/* set PreSelect build specific colors */
+		bTheme *btheme;
+		for (btheme = U.themes.first; btheme; btheme = btheme->next) {
+			/* check for (alpha == 0) is safe, then color was never set */
+			if (btheme->tv3d.presel_select[3] == 0) {
+				rgba_char_args_set(btheme->tv3d.presel_select,  0xff, 0xdc, 0x59, 100);
+			}
+			if (btheme->tv3d.presel_noselect[3] == 0) {
+				rgba_char_args_set(btheme->tv3d.presel_noselect,  0x87, 0x81, 0xff, 100);
+			}
+			if (btheme->tv3d.presel_prop[3] == 0) {
+				rgba_char_args_set(btheme->tv3d.presel_prop,  0xff, 0xab, 0x00, 255);
+			}
+			if (btheme->tima.presel_select[3] == 0) {
+				rgba_char_args_set(btheme->tima.presel_select,  0xff, 0xdc, 0x59, 100);
+			}
+			if (btheme->tima.presel_noselect[3] == 0) {
+				rgba_char_args_set(btheme->tima.presel_noselect,  0x87, 0x81, 0xff, 100);
+			}
+			if (btheme->tima.presel_prop[3] == 0) {
+				rgba_char_args_set(btheme->tima.presel_prop,  0xff, 0xab, 0x00, 255);
+			}
+		}
+	}
 
 }
 

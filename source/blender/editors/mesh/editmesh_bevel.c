@@ -103,6 +103,10 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
 	Scene *scene = CTX_data_scene(C);
 	BMEditMesh *em = BKE_editmesh_from_object(obedit);
 	BevelData *opdata;
+	
+	BLI_ghash_clear(em->presel_verts, NULL, NULL);
+	BLI_ghash_clear(em->presel_edges, NULL, NULL);
+	BLI_ghash_clear(em->presel_faces, NULL, NULL);
 
 	if (em->bm->totvertsel == 0) {
 		return false;

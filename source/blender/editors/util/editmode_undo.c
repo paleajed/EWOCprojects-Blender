@@ -45,6 +45,7 @@
 #include "BKE_blender.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
+#include "BKE_editmesh.h"
 #include "BKE_global.h"
 
 #include "ED_util.h"
@@ -237,12 +238,25 @@ static void undo_clean_stack(bContext *C)
 void undo_editmode_step(bContext *C, int step)
 {
 	Object *obedit = CTX_data_edit_object(C);
+	BMEditMesh *em = BKE_editmesh_from_object(obedit);
 	
 	/* prevent undo to happen on wrong object, stack can be a mix */
 	undo_clean_stack(C);
 	
 	if (step == 0) {
+			
 		undo_restore(curundo, curundo->getdata(C), obedit->data);
+			
+		/* reinitialize preselection item lists */
+		em = BKE_editmesh_from_object(obedit);
+		
+		em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+		em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+		em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+
+		em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+		em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+
 	}
 	else if (step == 1) {
 		
@@ -252,7 +266,19 @@ void undo_editmode_step(bContext *C, int step)
 		else {
 			if (G.debug & G_DEBUG) printf("undo %s\n", curundo->name);
 			curundo = curundo->prev;
+			
 			undo_restore(curundo, curundo->getdata(C), obedit->data);
+			
+			/* reinitialize preselection item lists */
+			em = BKE_editmesh_from_object(obedit);
+			
+			em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+
 		}
 	}
 	else {
@@ -262,7 +288,19 @@ void undo_editmode_step(bContext *C, int step)
 			error("No more steps to redo");
 		}
 		else {
+			
 			undo_restore(curundo->next, curundo->getdata(C), obedit->data);
+			
+			/* reinitialize preselection item lists */
+			em = BKE_editmesh_from_object(obedit);
+			
+			em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+
 			curundo = curundo->next;
 			if (G.debug & G_DEBUG) printf("redo %s\n", curundo->name);
 		}

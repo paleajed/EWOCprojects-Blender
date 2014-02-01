@@ -332,9 +332,30 @@ static void uvedit_pixel_to_float(SpaceImage *sima, float *dist, float pixeldist
 bool uvedit_face_visible_nolocal(Scene *scene, BMFace *efa)
 {
 	ToolSettings *ts = scene->toolsettings;
+	BMEditMesh *em;
+	BMIter liter;
+	BMLoop *l;
+	MLoopUV *luv;
+	int cd_loop_uv_offset;
+	bool nonzero = false;
 
-	if (ts->uv_flag & UV_SYNC_SELECTION)
-		return (BM_elem_flag_test(efa, BM_ELEM_HIDDEN) == 0);
+	if (ts->uv_flag & UV_SYNC_SELECTION) {
+		em = BKE_editmesh_from_object(scene->obedit);
+		cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
+		BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+			luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+			if (!(luv->uv[0] == 0) || !(luv->uv[1] == 0)) {
+				nonzero = true;
+				break;
+			}
+		}
+		if (nonzero) {
+			return (BM_elem_flag_test(efa, BM_ELEM_HIDDEN) == 0);
+		}
+		else {
+			return false;
+		}
+	}
 	else
 		return (BM_elem_flag_test(efa, BM_ELEM_HIDDEN) == 0 && BM_elem_flag_test(efa, BM_ELEM_SELECT));
 }
@@ -433,6 +454,12 @@ bool uvedit_face_select_disable(Scene *scene, BMEditMesh *em, BMFace *efa,
 	return false;
 }
 
+static void uvedit_face_presel(BMEditMesh *em, BMFace *efa)
+{
+	BLI_ghash_insert(em->presel_faces, efa, NULL);
+}
+
+
 bool uvedit_edge_select_test(Scene *scene, BMLoop *l,
                              const int cd_loop_uv_offset)
 {
@@ -530,6 +557,14 @@ void uvedit_edge_select_disable(BMEditMesh *em, Scene *scene, BMLoop *l,
 	}
 }
 
+static void uvedit_edge_presel(BMEditMesh *em, BMLoop *l)
+{
+	BMIter liter;
+	BMLoop *l2;
+
+	BLI_ghash_insert(em->presel_edges, l->e, l);
+}
+
 bool uvedit_uv_select_test(Scene *scene, BMLoop *l,
                            const int cd_loop_uv_offset)
 {
@@ -593,6 +628,18 @@ void uvedit_uv_select_disable(BMEditMesh *em, Scene *scene, BMLoop *l,
 	else {
 		MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 		luv->flag &= ~MLOOPUV_VERTSEL;
+	}
+}
+
+static void uvedit_uv_presel(BMEditMesh *em, BMLoop *l)
+{
+	BLI_ghash_insert(em->presel_verts, l->v, NULL);
+}
+
+static void uvedit_uv_presel_check(BMEditMesh *em, BMLoop *l)
+{
+	if (!(BLI_ghash_haskey(em->presel_verts, l->v))) {
+		BLI_ghash_insert(em->presel_verts, l->v, NULL);
 	}
 }
 
@@ -990,7 +1037,7 @@ static bool uv_select_edgeloop_edge_tag_faces(BMEditMesh *em, UvMapVert *first1,
 }
 
 static int uv_select_edgeloop(Scene *scene, Image *ima, BMEditMesh *em, NearestHit *hit,
-                              float limit[2], const bool extend)
+                              float limit[2], const bool extend, const bool presel)
 {
 	BMFace *efa;
 	BMIter iter, liter;
@@ -1011,7 +1058,7 @@ static int uv_select_edgeloop(Scene *scene, Image *ima, BMEditMesh *em, NearestH
 
 	BM_mesh_elem_index_ensure(em->bm, BM_VERT | BM_FACE);
 
-	if (!extend) {
+	if (!extend & !presel) {
 		uv_select_all_perform(scene, ima, em, SEL_DESELECT);
 	}
 
@@ -1080,7 +1127,12 @@ static int uv_select_edgeloop(Scene *scene, Image *ima, BMEditMesh *em, NearestH
 			iterv_curr = uv_select_edgeloop_vertex_map_get(vmap, efa, l);
 
 			if (iterv_curr->flag) {
-				uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+				if (presel) {
+					uvedit_uv_presel(em, l);
+				}
+				else {
+					uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+				}
 			}
 		}
 	}
@@ -1093,7 +1145,7 @@ static int uv_select_edgeloop(Scene *scene, Image *ima, BMEditMesh *em, NearestH
 
 /*********************** linked select ***********************/
 
-static void uv_select_linked(Scene *scene, Image *ima, BMEditMesh *em, const float limit[2], NearestHit *hit, bool extend)
+static void uv_select_linked(Scene *scene, Image *ima, BMEditMesh *em, const float limit[2], NearestHit *hit, bool extend, bool presel)
 {
 	BMFace *efa;
 	BMLoop *l;
@@ -1181,7 +1233,16 @@ static void uv_select_linked(Scene *scene, Image *ima, BMEditMesh *em, const flo
 		}
 	}
 
-	if (!extend) {
+	if (presel) {
+		BM_ITER_MESH_INDEX (efa, &iter, em->bm, BM_FACES_OF_MESH, a) {
+			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+				if (flag[a]) {
+					uvedit_uv_presel_check(em, l);
+				}
+			}
+		}
+	}
+	else if (!extend) {
 		BM_ITER_MESH_INDEX (efa, &iter, em->bm, BM_FACES_OF_MESH, a) {
 			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
@@ -1995,7 +2056,7 @@ static bool uv_sticky_select(float *limit, int hitv[4], int v, float *hituv[4], 
 	return false;
 }
 
-static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loop)
+static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loop, bool presel)
 {
 	SpaceImage *sima = CTX_wm_space_image(C);
 	Scene *scene = CTX_data_scene(C);
@@ -2018,6 +2079,8 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 	const int cd_loop_uv_offset  = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
 	const int cd_poly_tex_offset = CustomData_get_offset(&em->bm->pdata, CD_MTEXPOLY);
 
+	if (presel && !ts->use_presel) return OPERATOR_CANCELLED;
+	
 	/* notice 'limit' is the same no matter the zoom level, since this is like
 	 * remove doubles and could annoying if it joined points when zoomed out.
 	 * 'penalty' is in screen pixel space otherwise zooming in on a uv-vert and
@@ -2046,6 +2109,9 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 		sticky = (sima) ? sima->sticky : 1;
 	}
 
+	BLI_ghash_clear(em->presel_verts, NULL, NULL);
+	BLI_ghash_clear(em->presel_edges, NULL, NULL);
+	BLI_ghash_clear(em->presel_faces, NULL, NULL);
 	/* find nearest element */
 	if (loop) {
 		/* find edge */
@@ -2100,7 +2166,7 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 		}
 		
 		/* make active */
-		BM_mesh_active_face_set(em->bm, hit.efa);
+		if (!presel) BM_mesh_active_face_set(em->bm, hit.efa);
 
 		/* mark all face vertices as being hit */
 
@@ -2130,11 +2196,25 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 
 	/* do selection */
 	if (loop) {
-		flush = uv_select_edgeloop(scene, ima, em, &hit, limit, extend);
+		flush = uv_select_edgeloop(scene, ima, em, &hit, limit, extend, presel);
 	}
 	else if (selectmode == UV_SELECT_ISLAND) {
-		uv_select_linked(scene, ima, em, limit, &hit, extend);
+		uv_select_linked(scene, ima, em, limit, &hit, extend, presel);
 	}
+	else if (presel) {
+		if (selectmode == UV_SELECT_VERTEX) {
+			/* preselect uv vertex */
+			uvedit_uv_presel(em, hit.l);
+		}
+		else if (selectmode == UV_SELECT_EDGE) {
+			/* preselect edge */
+			uvedit_edge_presel(em, hit.l);
+		}
+		else if (selectmode == UV_SELECT_FACE) {
+			/* preselect face */
+			uvedit_face_presel(em, hit.efa);
+		}
+	}		
 	else if (extend) {
 		if (selectmode == UV_SELECT_VERTEX) {
 			/* (de)select uv vertex */
@@ -2156,7 +2236,7 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 		}
 
 		/* de-selecting an edge may deselect a face too - validate */
-		if (sync) {
+		if (sync & !presel) {
 			if (select == FALSE) {
 				BM_select_history_validate(em->bm);
 			}
@@ -2221,7 +2301,7 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 		}
 	}
 
-	if (sync) {
+	if (sync && !presel) {
 		/* flush for mesh selection */
 
 		/* before bmesh */
@@ -2248,8 +2328,13 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 #endif
 	}
 
-	DAG_id_tag_update(obedit->data, 0);
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	if (presel) {
+		WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+	}
+	else {
+		DAG_id_tag_update(obedit->data, 0);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+	}
 
 	return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
 }
@@ -2257,20 +2342,21 @@ static int uv_mouse_select(bContext *C, const float co[2], bool extend, bool loo
 static int uv_select_exec(bContext *C, wmOperator *op)
 {
 	float co[2];
-	bool extend, loop;
+	bool extend, loop, presel;
 
 	RNA_float_get_array(op->ptr, "location", co);
 	extend = RNA_boolean_get(op->ptr, "extend");
+	presel = RNA_boolean_get(op->ptr, "presel");
 	loop = false;
 
-	return uv_mouse_select(C, co, extend, loop);
+	return uv_mouse_select(C, co, extend, loop, presel);
 }
 
 static int uv_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ARegion *ar = CTX_wm_region(C);
 	float co[2];
-
+	printf("presel\n");
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
 	RNA_float_set_array(op->ptr, "location", co);
 
@@ -2293,6 +2379,31 @@ static void UV_OT_select(wmOperatorType *ot)
 	/* properties */
 	RNA_def_boolean(ot->srna, "extend", 0,
 	                "Extend", "Extend selection rather than clearing the existing selection");
+	RNA_def_boolean(ot->srna, "presel", 0,
+	                "Preselection", "Do preselection instead of actual selection");
+	RNA_def_float_vector(ot->srna, "location", 2, NULL, -FLT_MAX, FLT_MAX,
+	                     "Location", "Mouse location in normalized coordinates, 0.0 to 1.0 is within the image bounds", -100.0f, 100.0f);
+}
+
+/* ******************** preselect operator **************** */
+
+static void UV_OT_preselect(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Preselect";
+	ot->description = "Preselect UV vertices";
+	ot->idname = "UV_OT_preselect";
+	
+	/* api callbacks */
+	ot->exec = uv_select_exec;
+	ot->invoke = uv_select_invoke;
+	ot->poll = ED_operator_uvedit; /* requires space image */;
+
+	/* properties */
+	RNA_def_boolean(ot->srna, "extend", 0,
+	                "Extend", "Extend selection rather than clearing the existing selection");
+	RNA_def_boolean(ot->srna, "presel", 0,
+	                "Preselection", "Do preselection instead of actual selection");
 	RNA_def_float_vector(ot->srna, "location", 2, NULL, -FLT_MAX, FLT_MAX,
 	                     "Location", "Mouse location in normalized coordinates, 0.0 to 1.0 is within the image bounds", -100.0f, 100.0f);
 }
@@ -2302,13 +2413,14 @@ static void UV_OT_select(wmOperatorType *ot)
 static int uv_select_loop_exec(bContext *C, wmOperator *op)
 {
 	float co[2];
-	bool extend, loop;
+	bool extend, loop, presel;
 
 	RNA_float_get_array(op->ptr, "location", co);
 	extend = RNA_boolean_get(op->ptr, "extend");
+	presel = RNA_boolean_get(op->ptr, "presel");
 	loop = true;
 
-	return uv_mouse_select(C, co, extend, loop);
+	return uv_mouse_select(C, co, extend, loop, presel);
 }
 
 static int uv_select_loop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -2338,6 +2450,31 @@ static void UV_OT_select_loop(wmOperatorType *ot)
 	/* properties */
 	RNA_def_boolean(ot->srna, "extend", 0,
 	                "Extend", "Extend selection rather than clearing the existing selection");
+	RNA_def_boolean(ot->srna, "presel", 0,
+	                "Preselection", "Do preselection instead of actual selection");
+	RNA_def_float_vector(ot->srna, "location", 2, NULL, -FLT_MAX, FLT_MAX,
+	                     "Location", "Mouse location in normalized coordinates, 0.0 to 1.0 is within the image bounds", -100.0f, 100.0f);
+}
+
+/* ******************** loop preselect operator **************** */
+
+static void UV_OT_preselect_loop(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Loop Preselect";
+	ot->description = "Preselect a loop of connected UV vertices";
+	ot->idname = "UV_OT_preselect_loop";
+	
+	/* api callbacks */
+	ot->exec = uv_select_loop_exec;
+	ot->invoke = uv_select_loop_invoke;
+	ot->poll = ED_operator_uvedit; /* requires space image */;
+
+	/* properties */
+	RNA_def_boolean(ot->srna, "extend", 0,
+	                "Extend", "Extend selection rather than clearing the existing selection");
+	RNA_def_boolean(ot->srna, "presel", 0,
+	                "Preselection", "Do preselection instead of actual selection");
 	RNA_def_float_vector(ot->srna, "location", 2, NULL, -FLT_MAX, FLT_MAX,
 	                     "Location", "Mouse location in normalized coordinates, 0.0 to 1.0 is within the image bounds", -100.0f, 100.0f);
 }
@@ -2384,7 +2521,7 @@ static int uv_select_linked_internal(bContext *C, wmOperator *op, const wmEvent 
 		hit_p = &hit;
 	}
 
-	uv_select_linked(scene, ima, em, limit, hit_p, extend);
+	uv_select_linked(scene, ima, em, limit, hit_p, extend, false);
 
 	DAG_id_tag_update(obedit->data, 0);
 	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
@@ -2797,7 +2934,7 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 	MLoopUV *luv;
 	rcti rect;
 	rctf rectf;
-	bool changed, pinned, select, extend;
+	bool changed, pinned, select, extend, presel;
 	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
 	                            (ts->selectmode == SCE_SELECT_FACE) :
 	                            (ts->uv_selectmode == UV_SELECT_FACE);
@@ -2813,10 +2950,11 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 
 	/* figure out what to select/deselect */
 	select = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_SELECT);
+	presel = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_PRESEL);
 	pinned = RNA_boolean_get(op->ptr, "pinned");
 	extend = RNA_boolean_get(op->ptr, "extend");
 
-	if (!extend)
+	if (!extend & !presel)
 		uv_select_all_perform(scene, ima, em, SEL_DESELECT);
 
 	/* do actual selection */
@@ -2826,6 +2964,7 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 
 		changed = false;
 
+		BLI_ghash_clear(em->presel_faces, NULL, NULL);
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			/* assume not touched */
 			BM_elem_flag_disable(efa, BM_ELEM_TAG);
@@ -2834,8 +2973,13 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 			if (uvedit_face_visible_test(scene, ima, efa, tf)) {
 				uv_poly_center(efa, cent, cd_loop_uv_offset);
 				if (BLI_rctf_isect_pt_v(&rectf, cent)) {
-					BM_elem_flag_enable(efa, BM_ELEM_TAG);
-					changed = true;
+					if (presel) {
+						uvedit_face_presel(em, efa);
+					}
+					else {
+						BM_elem_flag_enable(efa, BM_ELEM_TAG);
+						changed = true;
+					}
 				}
 			}
 		}
@@ -2849,6 +2993,7 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 		/* other selection modes */
 		changed = true;
 		
+		BLI_ghash_clear(em->presel_verts, NULL, NULL);
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			tf = BM_ELEM_CD_GET_VOID_P(efa, cd_poly_tex_offset);
 			if (!uvedit_face_visible_test(scene, ima, efa, tf))
@@ -2860,12 +3005,24 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 
 					/* UV_SYNC_SELECTION - can't do pinned selection */
 					if (BLI_rctf_isect_pt_v(&rectf, luv->uv)) {
-						uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+						if (presel) {
+							uvedit_uv_presel(em, l);
+							changed = false;
+						}
+						else {
+							uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+						}
 					}
 				}
 				else if (pinned) {
 					if ((luv->flag & MLOOPUV_PINNED) && BLI_rctf_isect_pt_v(&rectf, luv->uv)) {
-						uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+						if (presel) {
+							uvedit_uv_presel(em, l);
+							changed = false;
+						}
+						else {
+							uvedit_uv_select_set(em, scene, l, select, false, cd_loop_uv_offset);
+						}
 					}
 				}
 			}
@@ -2877,8 +3034,11 @@ static int uv_border_select_exec(bContext *C, wmOperator *op)
 
 		if (ts->uv_flag & UV_SYNC_SELECTION) {
 			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
-		}
-		
+		}		
+		return OPERATOR_FINISHED;
+	}
+	if (presel) {
+		WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
 		return OPERATOR_FINISHED;
 	}
 
@@ -2932,6 +3092,14 @@ static bool uv_select_inside_ellipse(BMEditMesh *em, Scene *scene, const bool se
 	}
 }
 
+static void uv_presel_inside_ellipse(BMEditMesh *em, const float offset[2], 
+                                     const float ellipse[2], BMLoop *l, MLoopUV *luv)
+{
+	if (uv_inside_circle(luv->uv, offset, ellipse)) {
+		uvedit_uv_presel_check(em, l);
+	}
+}
+
 static int uv_circle_select_exec(bContext *C, wmOperator *op)
 {
 	SpaceImage *sima = CTX_wm_space_image(C);
@@ -2946,8 +3114,7 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 	MLoopUV *luv;
 	int x, y, radius, width, height;
 	float zoomx, zoomy, offset[2], ellipse[2];
-	int gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
-	const bool select = (gesture_mode == GESTURE_MODAL_SELECT);
+	bool select, presel;
 	bool changed = false;
 	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
 	                             (ts->selectmode == SCE_SELECT_FACE) :
@@ -2956,6 +3123,8 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 	const int cd_loop_uv_offset  = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
 
 	/* get operator properties */
+	select = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_SELECT);
+	presel = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_PRESEL);
 	x = RNA_int_get(op->ptr, "x");
 	y = RNA_int_get(op->ptr, "y");
 	radius = RNA_int_get(op->ptr, "radius");
@@ -2973,15 +3142,22 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 	/* do selection */
 	if (use_face_center) {
 		changed = false;
+		BLI_ghash_clear(em->presel_verts, NULL, NULL);
+		BLI_ghash_clear(em->presel_faces, NULL, NULL);
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
 			BM_elem_flag_disable(efa, BM_ELEM_TAG);
 			/* assume not touched */
-			if (select != uvedit_face_select_test(scene, efa, cd_loop_uv_offset)) {
+			if (presel || (select != uvedit_face_select_test(scene, efa, cd_loop_uv_offset))) {
 				float cent[2];
 				uv_poly_center(efa, cent, cd_loop_uv_offset);
 				if (uv_inside_circle(cent, offset, ellipse)) {
-					BM_elem_flag_enable(efa, BM_ELEM_TAG);
-					changed = true;
+					if (presel) {
+						uvedit_face_presel(em, efa);
+					}
+					else {
+						BM_elem_flag_enable(efa, BM_ELEM_TAG);
+						changed = true;
+					}
 				}
 			}
 		}
@@ -2992,10 +3168,21 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 		}
 	}
 	else {
+		BLI_ghash_clear(em->presel_verts, NULL, NULL);
 		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+			if (!BM_elem_flag_test(efa, BM_ELEM_TAG)) continue;
+			if (ts->uv_flag & UV_SYNC_SELECTION) {
+				if (!BM_elem_flag_test(efa, BM_ELEM_SELECT)) continue;
+			}
 			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
 				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-				changed |= uv_select_inside_ellipse(em, scene, select, offset, ellipse, l, luv, cd_loop_uv_offset);
+				if (!presel) {
+					changed |= uv_select_inside_ellipse(em, scene, select, offset, ellipse, l, luv, cd_loop_uv_offset);
+				}
+				else {
+					uv_presel_inside_ellipse(em, offset, ellipse, l, luv);
+					changed = false;
+				}
 			}
 		}
 	}
@@ -3003,7 +3190,10 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 	if (changed) {
 		uv_select_sync_flush(ts, em, select);
 
-		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+		WM_event_add_notifier(C, NC_GEOM | ND_SELECT | NA_PAINTING, obedit->data);
+	}
+	if (presel) {
+		WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
 	}
 
 	return OPERATOR_FINISHED;
@@ -3031,6 +3221,7 @@ static void UV_OT_circle_select(wmOperatorType *ot)
 	RNA_def_int(ot->srna, "y", 0, INT_MIN, INT_MAX, "Y", "", INT_MIN, INT_MAX);
 	RNA_def_int(ot->srna, "radius", 0, INT_MIN, INT_MAX, "Radius", "", INT_MIN, INT_MAX);
 	RNA_def_int(ot->srna, "gesture_mode", 0, INT_MIN, INT_MAX, "Gesture Mode", "", INT_MIN, INT_MAX);
+	RNA_def_int(ot->srna, "regionid", 0, INT_MIN, INT_MAX, "Region id", "", INT_MIN, INT_MAX);
 }
 
 
@@ -4135,6 +4326,9 @@ void ED_operatortypes_uvedit(void)
 	WM_operatortype_append(UV_OT_select_more);
 	WM_operatortype_append(UV_OT_select_less);
 
+	WM_operatortype_append(UV_OT_preselect);
+	WM_operatortype_append(UV_OT_preselect_loop);
+	
 	WM_operatortype_append(UV_OT_snap_cursor);
 	WM_operatortype_append(UV_OT_snap_selected);
 
@@ -4180,11 +4374,29 @@ void ED_keymap_uvedit(wmKeyConfig *keyconf)
 	/* Mark edge seam */
 	WM_keymap_add_item(keymap, "UV_OT_mark_seam", EKEY, KM_PRESS, KM_CTRL, 0);
 	
+	/* preselection */
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, 0, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, KM_SHIFT, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT | KM_SHIFT, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", TRUE);
+
 	/* pick selection */
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_select", SELECTMOUSE, KM_PRESS, 0, 0)->ptr, "extend", FALSE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT, 0)->ptr, "extend", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_select_loop", SELECTMOUSE, KM_PRESS, KM_ALT, 0)->ptr, "extend", FALSE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_select_loop", SELECTMOUSE, KM_PRESS, KM_SHIFT | KM_ALT, 0)->ptr, "extend", TRUE);
+	kmi = WM_keymap_add_item(keymap, "UV_OT_select", SELECTMOUSE, KM_PRESS, 0, 0);
+	RNA_boolean_set(kmi->ptr, "extend", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	kmi = WM_keymap_add_item(keymap, "UV_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "extend", TRUE);
+	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	kmi = WM_keymap_add_item(keymap, "UV_OT_select_loop", SELECTMOUSE, KM_PRESS, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "extend", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	kmi = WM_keymap_add_item(keymap, "UV_OT_select_loop", SELECTMOUSE, KM_PRESS, KM_SHIFT | KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "extend", TRUE);
+	RNA_boolean_set(kmi->ptr, "presel", FALSE);
 	WM_keymap_add_item(keymap, "UV_OT_select_split", YKEY, KM_PRESS, 0, 0);
 
 	/* border/circle selection */

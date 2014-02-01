@@ -114,8 +114,9 @@ typedef struct RegionView3D {
 	struct wmTimer *smooth_timer;
 
 
-	/* transform widget matrix */
+	/* transform widget matrices */
 	float twmat[4][4];
+	float twsetmat[4][4];
 
 	float viewquat[4];			/* view rotation, must be kept normalized */
 	float dist;					/* distance from 'ofs' along -viewinv[2] vector, where result is negative as is 'ofs' */
@@ -190,8 +191,9 @@ typedef struct View3D {
 	 * OB_TEXTURE, OB_MATERIAL or OB_RENDER */
 	short drawtype;
 	short ob_centre_cursor;		/* optional bool for 3d cursor to define center */
-	short scenelock, around;
+	short scenelock, around, oldaround;
 	short flag, flag2;
+	short pad5[3];
 	
 	float lens, grid;
 	float near, far;
@@ -292,6 +294,7 @@ typedef struct View3D {
 #define V3D_CURSOR		 1
 #define V3D_LOCAL		 2
 #define V3D_ACTIVE		 4
+#define V3D_FREE		 8
 
 /*View3D types (only used in tools, not actually saved)*/
 #define V3D_VIEW_STEPLEFT		 1
@@ -320,12 +323,16 @@ typedef struct View3D {
 #define V3D_MANIP_NORMAL		2
 #define V3D_MANIP_VIEW			3
 #define V3D_MANIP_GIMBAL		4
-#define V3D_MANIP_CUSTOM		5 /* anything of value 5 or higher is custom */
+#define V3D_MANIP_FREE			5
+#define V3D_MANIP_CUSTOM		6 /* anything of value 6 or higher is custom */
 
 /* View3d->twflag */
    /* USE = user setting, DRAW = based on selection */
+   /* SET = freemove manipulator, FREE = use freemove manipulator */
 #define V3D_USE_MANIPULATOR		1
 #define V3D_DRAW_MANIPULATOR	2
+#define V3D_SET_MANIPULATOR		4
+#define V3D_FREE_MANIPULATOR	8
 /* #define V3D_CALC_MANIPULATOR	4 */ /*UNUSED*/
 
 /* BGPic->flag */

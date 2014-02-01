@@ -288,7 +288,7 @@ static void rna_Object_ray_cast(Object *ob, ReportList *reports, float ray_start
 	}
 
 	/* no need to managing allocation or freeing of the BVH data. this is generated and freed as needed */
-	bvhtree_from_mesh_faces(&treeData, ob->derivedFinal, 0.0f, 4, 6);
+	bvhtree_from_mesh_faces(&treeData, ob->derivedFinal, 0.0f, 4, 6, true);
 
 	if (treeData.tree == NULL) {
 		BKE_reportf(reports, RPT_ERROR, "Object '%s' could not create internal data for ray casting", ob->id.name + 2);
@@ -331,7 +331,7 @@ static void rna_Object_closest_point_on_mesh(Object *ob, ReportList *reports, fl
 	}
 
 	/* no need to managing allocation or freeing of the BVH data. this is generated and freed as needed */
-	bvhtree_from_mesh_faces(&treeData, ob->derivedFinal, 0.0f, 4, 6);
+	bvhtree_from_mesh_faces(&treeData, ob->derivedFinal, 0.0f, 4, 6, true);
 
 	if (treeData.tree == NULL) {
 		BKE_reportf(reports, RPT_ERROR, "Object '%s' could not create internal data for finding nearest point",

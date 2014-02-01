@@ -588,6 +588,8 @@ int calc_manipulator_stats(const bContext *C)
 	/* global, local or normal orientation? */
 	if (ob && totsel) {
 
+		v3d->twflag &= ~V3D_FREE_MANIPULATOR;
+		
 		switch (v3d->twmode) {
 		
 			case V3D_MANIP_GLOBAL:
@@ -639,11 +641,26 @@ int calc_manipulator_stats(const bContext *C)
 				copy_m4_m3(rv3d->twmat, mat);
 				break;
 			}
+			case V3D_MANIP_FREE:
+			{
+				v3d->twflag |= V3D_FREE_MANIPULATOR;
+				break;
+			}
 			default: /* V3D_MANIP_CUSTOM */
 			{
 				float mat[3][3];
+				float center[3];
+				bool retval;
+				
 				if (applyTransformOrientation(C, mat, NULL)) {
 					copy_m4_m3(rv3d->twmat, mat);
+				}
+				retval = applyTransformLocation(C, center);
+				if (retval) {
+					v3d->twflag |= V3D_FREE_MANIPULATOR;
+					v3d->around = V3D_FREE;
+					copy_m4_m4(rv3d->twsetmat, rv3d->twmat);
+					copy_v3_v3(rv3d->twsetmat[3], center);
 				}
 				break;
 			}
@@ -814,12 +831,22 @@ static void manipulator_setcolor(View3D *v3d, char axis, int colcode, unsigned c
 		col[3] = 70;
 	}
 	else if (colcode == MAN_MOVECOL) {
-		UI_GetThemeColor3ubv(TH_TRANSFORM, col);
+		if (v3d->twflag & V3D_SET_MANIPULATOR) {
+			UI_GetThemeColor3ubv(TH_TRANSFORM_SET, col);
+		}
+		else {
+			UI_GetThemeColor3ubv(TH_TRANSFORM, col);
+		}
 	}
 	else {
 		switch (axis) {
 			case 'C':
-				UI_GetThemeColor3ubv(TH_TRANSFORM, col);
+				if (v3d->twflag & V3D_SET_MANIPULATOR) {
+					UI_GetThemeColor3ubv(TH_TRANSFORM_SET, col);
+				}
+				else {
+					UI_GetThemeColor3ubv(TH_TRANSFORM, col);
+				}
 				if (v3d->twmode == V3D_MANIP_LOCAL) {
 					col[0] = col[0] > 200 ? 255 : col[0] + 55;
 					col[1] = col[1] > 200 ? 255 : col[1] + 55;
@@ -980,14 +1007,24 @@ static void draw_manipulator_rotate(View3D *v3d, RegionView3D *rv3d, int moving,
 	if (drawflags & MAN_ROT_T) {
 		if (G.f & G_PICKSEL) glLoadName(MAN_ROT_T);
 
-		UI_ThemeColor(TH_TRANSFORM);
+		if (v3d->twflag & V3D_SET_MANIPULATOR) {
+			UI_ThemeColor(TH_TRANSFORM_SET);
+		}
+		else {
+			UI_ThemeColor(TH_TRANSFORM);
+		}
 		drawcircball(GL_LINE_LOOP, unitmat[3], 0.2f * size, unitmat);
 	}
 
 	/* Screen aligned view rot circle */
 	if (drawflags & MAN_ROT_V) {
 		if (G.f & G_PICKSEL) glLoadName(MAN_ROT_V);
-		UI_ThemeColor(TH_TRANSFORM);
+		if (v3d->twflag & V3D_SET_MANIPULATOR) {
+			UI_ThemeColor(TH_TRANSFORM_SET);
+		}
+		else {
+			UI_ThemeColor(TH_TRANSFORM);
+		}
 		drawcircball(GL_LINE_LOOP, unitmat[3], 1.2f * size, unitmat);
 
 		if (moving) {
@@ -1498,7 +1535,12 @@ static void draw_manipulator_rotate_cyl(View3D *v3d, RegionView3D *rv3d, int mov
 		float unitmat[4][4] = MAT4_UNITY;
 
 		if (G.f & G_PICKSEL) glLoadName(MAN_ROT_V);
-		UI_ThemeColor(TH_TRANSFORM);
+		if (v3d->twflag & V3D_SET_MANIPULATOR) {
+			UI_ThemeColor(TH_TRANSFORM_SET);
+		}
+		else {
+			UI_ThemeColor(TH_TRANSFORM);
+		}
 		drawcircball(GL_LINE_LOOP, unitmat[3], 1.2f * size, unitmat);
 
 		if (moving) {
@@ -1604,7 +1646,7 @@ void BIF_draw_manipulator(const bContext *C)
 	View3D *v3d = sa->spacedata.first;
 	RegionView3D *rv3d = ar->regiondata;
 	int totsel;
-
+	
 	if (!(v3d->twflag & V3D_USE_MANIPULATOR)) return;
 
 	{
@@ -1622,7 +1664,7 @@ void BIF_draw_manipulator(const bContext *C)
 			{
 				Object *ob;
 				if (((v3d->around == V3D_ACTIVE) && (scene->obedit == NULL)) &&
-				    ((ob = OBACT) && !(ob->mode & OB_MODE_POSE)))
+					((ob = OBACT) && !(ob->mode & OB_MODE_POSE)))
 				{
 					copy_v3_v3(rv3d->twmat[3], ob->obmat[3]);
 				}
@@ -1639,7 +1681,15 @@ void BIF_draw_manipulator(const bContext *C)
 				copy_v3_v3(rv3d->twmat[3], ED_view3d_cursor3d_get(scene, v3d));
 				break;
 		}
-
+		if ((!(v3d->twflag & V3D_SET_MANIPULATOR)) && (!(v3d->twflag & V3D_FREE_MANIPULATOR))) {
+			copy_m4_m4(rv3d->twsetmat, rv3d->twmat);
+		}
+		else {
+			if (!(v3d->around == V3D_FREE)) {
+				copy_v3_v3(rv3d->twsetmat[3], rv3d->twmat[3]);
+			}
+			copy_m4_m4(rv3d->twmat, rv3d->twsetmat);
+		}
 		mul_mat3_m4_fl(rv3d->twmat, ED_view3d_pixel_size(rv3d, rv3d->twmat[3]) * U.tw_size * 5.0f);
 	}
 
@@ -1674,7 +1724,9 @@ void BIF_draw_manipulator(const bContext *C)
 		}
 
 		glDisable(GL_BLEND);
+			
 	}
+	
 }
 
 static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], float hotspot)
@@ -1775,15 +1827,16 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 	int constraint_axis[3] = {0, 0, 0};
 	int val;
 	int shift = event->shift;
-
+	
 	if (!(v3d->twflag & V3D_USE_MANIPULATOR)) return 0;
 	if (!(v3d->twflag & V3D_DRAW_MANIPULATOR)) return 0;
-
+	
 	/* Force orientation */
 	RNA_enum_set(op->ptr, "constraint_orientation", v3d->twmode);
 
 	// find the hotspots first test narrow hotspot
 	val = manipulator_selectbuf(sa, ar, event->mval, 0.5f * (float)U.tw_hotspot);
+
 	if (val) {
 
 		// drawflags still global, for drawing call above
@@ -1821,7 +1874,6 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 			}
 			RNA_boolean_set_array(op->ptr, "constraint_axis", constraint_axis);
 			WM_operator_name_call(C, "TRANSFORM_OT_translate", WM_OP_INVOKE_DEFAULT, op->ptr);
-			//wm_operator_invoke(C, WM_operatortype_find("TRANSFORM_OT_translate", 0), event, op->ptr, NULL, FALSE);
 		}
 		else if (drawflags & MAN_SCALE_C) {
 			switch (drawflags) {
@@ -1859,11 +1911,13 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 			 * See [#34621], it's a miracle it did not cause more problems!!! */
 			/* However, we need to copy the "release_confirm" property... */
 			PointerRNA props_ptr;
-			wmOperatorType *ot = WM_operatortype_find("TRANSFORM_OT_trackball", true);
-			WM_operator_properties_create_ptr(&props_ptr, ot);
+			wmOperatorType *ot;
+			
 			RNA_boolean_set(&props_ptr, "release_confirm", RNA_boolean_get(op->ptr, "release_confirm"));
-			WM_operator_name_call(C, ot->idname, WM_OP_INVOKE_DEFAULT, &props_ptr);
-			//wm_operator_invoke(C, WM_operatortype_find(ot->idname, 0), event, NULL, NULL, FALSE);
+
+			ot = WM_operatortype_find("TRANSFORM_OT_trackball", true);
+			WM_operator_properties_create_ptr(&props_ptr, ot);				
+			WM_operator_name_call(C, "TRANSFORM_OT_trackball", WM_OP_INVOKE_DEFAULT, &props_ptr);
 			WM_operator_properties_free(&props_ptr);
 		}
 		else if (drawflags & MAN_ROT_C) {
@@ -1880,7 +1934,6 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 			}
 			RNA_boolean_set_array(op->ptr, "constraint_axis", constraint_axis);
 			WM_operator_name_call(C, "TRANSFORM_OT_rotate", WM_OP_INVOKE_DEFAULT, op->ptr);
-			//wm_operator_invoke(C, WM_operatortype_find("TRANSFORM_OT_rotate", 0), event, op->ptr, NULL, FALSE);
 		}
 	}
 	/* after transform, restore drawflags */

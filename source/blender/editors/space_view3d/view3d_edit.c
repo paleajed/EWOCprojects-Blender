@@ -80,6 +80,8 @@
 
 #include "PIL_time.h" /* smoothview */
 
+#include "wm_event_system.h"
+
 #include "view3d_intern.h"  /* own include */
 
 /* for ndof prints */
@@ -606,6 +608,9 @@ static void viewops_data_free(bContext *C, wmOperator *op)
 {
 	ARegion *ar;
 	Paint *p = BKE_paint_get_active_from_context(C);
+	wmWindow *win = CTX_wm_window(C);
+	
+	WM_gestures_reset_level(win);
 
 	if (op->customdata) {
 		ViewOpsData *vod = op->customdata;
@@ -925,6 +930,8 @@ static void viewrotate_apply(ViewOpsData *vod, int x, int y)
 	ED_view3d_camera_lock_sync(vod->v3d, rv3d);
 
 	ED_region_tag_redraw(vod->ar);
+	
+	WM_main_add_notifier(NC_SPACE | ND_SPACE_VIEW3D | NA_TRANSFORMED, NULL);
 }
 
 static int viewrotate_modal(bContext *C, wmOperator *op, const wmEvent *event)
@@ -979,6 +986,9 @@ static int viewrotate_modal(bContext *C, wmOperator *op, const wmEvent *event)
 static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod;
+	wmWindow *win = CTX_wm_window(C);
+	
+	win->gesture_level = WM_GESTURE_OVERRIDE;   /* interrupt gesture display */
 
 	/* makes op->customdata */
 	viewops_data_alloc(C, op);
@@ -1624,6 +1634,8 @@ static void viewmove_apply(ViewOpsData *vod, int x, int y)
 	ED_view3d_camera_lock_sync(vod->v3d, vod->rv3d);
 
 	ED_region_tag_redraw(vod->ar);
+	
+	WM_main_add_notifier(NC_SPACE | ND_SPACE_VIEW3D | NA_TRANSFORMED, NULL);
 }
 
 
@@ -1756,6 +1768,27 @@ void viewzoom_modal_keymap(wmKeyConfig *keyconf)
 	WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom");
 }
 
+static void set_circle_select_zfac(bContext *C, float zfac)
+{
+	wmWindow *win = CTX_wm_window(C);
+	wmEventHandler *eh;
+	
+	if (U.flag & USER_GROW_CIRCLESELECT) {
+		for (eh = win->modalhandlers.first; eh; eh = eh->next) {
+			if (eh->op) {
+				if (strcmp(eh->op->idname, "VIEW3D_OT_select_circle") == 0) {
+					RegionView3D *rv3d = CTX_wm_region_view3d(C);
+					if (rv3d->persp == RV3D_ORTHO) {
+						wmGesture *gesture = eh->op->customdata;
+						rctf *rect = gesture->customdata;
+						rect->xmax /= zfac;
+					}
+				}
+			}
+		}
+	}
+}
+
 static void view_zoom_mouseloc(ARegion *ar, float dfac, int mx, int my)
 {
 	RegionView3D *rv3d = ar->regiondata;
@@ -1796,7 +1829,7 @@ static void view_zoom_mouseloc(ARegion *ar, float dfac, int mx, int my)
 }
 
 
-static void viewzoom_apply(ViewOpsData *vod, const int x, const int y, const short viewzoom, const short zoom_invert)
+static float viewzoom_apply(ViewOpsData *vod, const int x, const int y, const short viewzoom, const short zoom_invert)
 {
 	float zfac = 1.0;
 	bool use_cam_zoom;
@@ -1887,6 +1920,8 @@ static void viewzoom_apply(ViewOpsData *vod, const int x, const int y, const sho
 	ED_view3d_camera_lock_sync(vod->v3d, vod->rv3d);
 
 	ED_region_tag_redraw(vod->ar);
+	
+	return zfac;
 }
 
 
@@ -1894,6 +1929,7 @@ static int viewzoom_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod = op->customdata;
 	short event_code = VIEW_PASS;
+	float zfac = 1.0f;
 
 	/* execute the events */
 	if (event->type == TIMER && event->customdata == vod->timer) {
@@ -1923,7 +1959,8 @@ static int viewzoom_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 
 	if (event_code == VIEW_APPLY) {
-		viewzoom_apply(vod, event->x, event->y, U.viewzoom, (U.uiflag & USER_ZOOM_INVERT) != 0);
+		zfac = viewzoom_apply(vod, event->x, event->y, U.viewzoom, (U.uiflag & USER_ZOOM_INVERT) != 0);
+		set_circle_select_zfac(C, zfac);
 	}
 	else if (event_code == VIEW_CONFIRM) {
 		ED_view3d_depth_tag_update(vod->rv3d);
@@ -1941,6 +1978,7 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
 	RegionView3D *rv3d;
 	ScrArea *sa;
 	ARegion *ar;
+	float fac = 1.0f;
 	bool use_cam_zoom;
 
 	const int delta = RNA_int_get(op->ptr, "delta");
@@ -1972,7 +2010,8 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
 			if (rv3d->camzoom < RV3D_CAMZOOM_MIN) rv3d->camzoom = RV3D_CAMZOOM_MIN;
 		}
 		else if (rv3d->dist < 10.0f * v3d->far) {
-			view_zoom_mouseloc(ar, 1.2f, mx, my);
+			fac = 1.2f;
+			view_zoom_mouseloc(ar, fac, mx, my);
 		}
 	}
 	else {
@@ -1981,7 +2020,8 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
 			if (rv3d->camzoom > RV3D_CAMZOOM_MAX) rv3d->camzoom = RV3D_CAMZOOM_MAX;
 		}
 		else if (rv3d->dist > 0.001f * v3d->grid) {
-			view_zoom_mouseloc(ar, 0.83333f, mx, my);
+			fac = 0.83333f;
+			view_zoom_mouseloc(ar, fac, mx, my);
 		}
 	}
 
@@ -1995,7 +2035,11 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
 	ED_region_tag_redraw(ar);
 
 	viewops_data_free(C, op);
+	
+	set_circle_select_zfac(C, fac);
 
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D | NA_TRANSFORMED, NULL);
+	
 	return OPERATOR_FINISHED;
 }
 
@@ -2038,6 +2082,7 @@ void viewdolly_modal_keymap(wmKeyConfig *keyconf)
 static int viewzoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod;
+	float zfac;
 
 	/* makes op->customdata */
 	viewops_data_alloc(C, op);
@@ -2058,16 +2103,21 @@ static int viewzoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 			if (U.uiflag & USER_ZOOM_HORIZ) {
 				vod->origx = vod->oldx = event->x;
-				viewzoom_apply(vod, event->prevx, event->prevy, USER_ZOOM_DOLLY, (U.uiflag & USER_ZOOM_INVERT) != 0);
+				zfac = viewzoom_apply(vod, event->prevx, event->prevy, USER_ZOOM_DOLLY, (U.uiflag & USER_ZOOM_INVERT) != 0);
 			}
 			else {
 				/* Set y move = x move as MOUSEZOOM uses only x axis to pass magnification value */
 				vod->origy = vod->oldy = vod->origy + event->x - event->prevx;
-				viewzoom_apply(vod, event->prevx, event->prevy, USER_ZOOM_DOLLY, (U.uiflag & USER_ZOOM_INVERT) != 0);
+				zfac = viewzoom_apply(vod, event->prevx, event->prevy, USER_ZOOM_DOLLY, (U.uiflag & USER_ZOOM_INVERT) != 0);
 			}
 			ED_view3d_depth_tag_update(vod->rv3d);
 			
 			viewops_data_free(C, op);
+			
+			set_circle_select_zfac(C, zfac);
+
+			WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D | NA_TRANSFORMED, NULL);
+	
 			return OPERATOR_FINISHED;
 		}
 		else {
@@ -2121,7 +2171,7 @@ static void view_dolly_mouseloc(ARegion *ar, float orig_ofs[3], float dvec[3], f
 	madd_v3_v3v3fl(rv3d->ofs, orig_ofs, dvec, -(1.0f - dfac));
 }
 
-static void viewdolly_apply(ViewOpsData *vod, int x, int y, const short zoom_invert)
+static float viewdolly_apply(ViewOpsData *vod, int x, int y, const short zoom_invert)
 {
 	float zfac = 1.0;
 
@@ -2151,6 +2201,8 @@ static void viewdolly_apply(ViewOpsData *vod, int x, int y, const short zoom_inv
 	ED_view3d_camera_lock_sync(vod->v3d, vod->rv3d);
 
 	ED_region_tag_redraw(vod->ar);
+	
+	return zfac;
 }
 
 
@@ -2252,6 +2304,7 @@ static int viewdolly_exec(bContext *C, wmOperator *op)
 static int viewdolly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod;
+	float zfac = 1.0f;
 
 	if (view3d_operator_offset_lock_check(C, op))
 		return OPERATOR_CANCELLED;
@@ -2308,9 +2361,11 @@ static int viewdolly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 				/* Set y move = x move as MOUSEZOOM uses only x axis to pass magnification value */
 				vod->origy = vod->oldy = vod->origy + event->x - event->prevx;
-				viewdolly_apply(vod, event->prevx, event->prevy, (U.uiflag & USER_ZOOM_INVERT) == 0);
+				zfac = viewdolly_apply(vod, event->prevx, event->prevy, (U.uiflag & USER_ZOOM_INVERT) == 0);
 			}
 			ED_view3d_depth_tag_update(vod->rv3d);
+
+			set_circle_select_zfac(C, zfac);
 
 			viewops_data_free(C, op);
 			return OPERATOR_FINISHED;
@@ -3186,6 +3241,8 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
 	if (rv3d->viewlock & RV3D_BOXVIEW)
 		view3d_boxview_sync(CTX_wm_area(C), ar);
 
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D | NA_TRANSFORMED, NULL);
+	
 	return OPERATOR_FINISHED;
 }
 

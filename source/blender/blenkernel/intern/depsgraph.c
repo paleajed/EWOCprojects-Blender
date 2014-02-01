@@ -65,7 +65,6 @@
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_group.h"
-#include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
@@ -1952,12 +1951,6 @@ static void dag_object_time_update_flags(Main *bmain, Scene *scene, Object *ob)
 				break;
 			case OB_MBALL:
 				if (ob->transflag & OB_DUPLI) ob->recalc |= OB_RECALC_DATA;
-				break;
-			case OB_EMPTY:
-				/* update animated images */
-				if (ob->empty_drawtype == OB_EMPTY_IMAGE && ob->data)
-					if (BKE_image_is_animated(ob->data))
-						ob->recalc |= OB_RECALC_DATA;
 				break;
 		}
 		

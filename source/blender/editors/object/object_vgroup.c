@@ -1004,7 +1004,7 @@ static bool ed_vgroup_transfer_weight(Object *ob_dst, Object *ob_src, bDeformGro
 			mface_src = dmesh_src->getTessFaceArray(dmesh_src);
 
 			/* Make node tree.*/
-			bvhtree_from_mesh_faces(&tree_mesh_faces_src, dmesh_src, FLT_EPSILON, 2, 6);
+			bvhtree_from_mesh_faces(&tree_mesh_faces_src, dmesh_src, FLT_EPSILON, 2, 6, true);
 
 			/* Loop through the vertices.*/
 			for (i = 0, dv_dst = dv_array_dst; i < me_dst->totvert; i++, dv_dst++, mv_dst++) {
@@ -1065,7 +1065,7 @@ static bool ed_vgroup_transfer_weight(Object *ob_dst, Object *ob_src, bDeformGro
 			mface_src = dmesh_src->getTessFaceArray(dmesh_src);
 
 			/* Make node tree.*/
-			bvhtree_from_mesh_faces(&tree_mesh_faces_src, dmesh_src, FLT_EPSILON, 2, 6);
+			bvhtree_from_mesh_faces(&tree_mesh_faces_src, dmesh_src, FLT_EPSILON, 2, 6, true);
 
 			/* Loop through the vertices.*/
 			for (i = 0, dv_dst = dv_array_dst; i < me_dst->totvert; i++, dv_dst++, mv_dst++) {

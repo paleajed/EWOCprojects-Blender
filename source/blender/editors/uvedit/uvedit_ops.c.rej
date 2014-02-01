@@ -1,0 +1,153 @@
+***************
+*** 2797,2803 ****
+  	MLoopUV *luv;
+  	rcti rect;
+  	rctf rectf;
+- 	bool change, pinned, select, extend;
+  	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
+  	                            (ts->selectmode == SCE_SELECT_FACE) :
+  	                            (ts->uv_selectmode == UV_SELECT_FACE);
+--- 2934,2940 ----
+  	MLoopUV *luv;
+  	rcti rect;
+  	rctf rectf;
++ 	bool change, pinned, select, extend, presel;
+  	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
+  	                            (ts->selectmode == SCE_SELECT_FACE) :
+  	                            (ts->uv_selectmode == UV_SELECT_FACE);
+***************
+*** 2834,2841 ****
+  			if (uvedit_face_visible_test(scene, ima, efa, tf)) {
+  				uv_poly_center(efa, cent, cd_loop_uv_offset);
+  				if (BLI_rctf_isect_pt_v(&rectf, cent)) {
+- 					BM_elem_flag_enable(efa, BM_ELEM_TAG);
+- 					change = true;
+  				}
+  			}
+  		}
+--- 2973,2985 ----
+  			if (uvedit_face_visible_test(scene, ima, efa, tf)) {
+  				uv_poly_center(efa, cent, cd_loop_uv_offset);
+  				if (BLI_rctf_isect_pt_v(&rectf, cent)) {
++ 					if (presel) {
++ 						uvedit_face_presel(em, efa);
++ 					}
++ 					else {
++ 						BM_elem_flag_enable(efa, BM_ELEM_TAG);
++ 						change = true;
++ 					}
+  				}
+  			}
+  		}
+***************
+*** 2946,2961 ****
+  	MLoopUV *luv;
+  	int x, y, radius, width, height;
+  	float zoomx, zoomy, offset[2], ellipse[2];
+- 	int gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
+- 	const bool select = (gesture_mode == GESTURE_MODAL_SELECT);
+  	bool change = false;
+  	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
+  	                             (ts->selectmode == SCE_SELECT_FACE) :
+  	                             (ts->uv_selectmode == UV_SELECT_FACE);
+  
+  	const int cd_loop_uv_offset  = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
+- 
+  	/* get operator properties */
+  	x = RNA_int_get(op->ptr, "x");
+  	y = RNA_int_get(op->ptr, "y");
+  	radius = RNA_int_get(op->ptr, "radius");
+--- 3114,3130 ----
+  	MLoopUV *luv;
+  	int x, y, radius, width, height;
+  	float zoomx, zoomy, offset[2], ellipse[2];
++ 	bool select, presel;
+  	bool change = false;
+  	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
+  	                             (ts->selectmode == SCE_SELECT_FACE) :
+  	                             (ts->uv_selectmode == UV_SELECT_FACE);
+  
+  	const int cd_loop_uv_offset  = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
++ 	
+  	/* get operator properties */
++ 	select = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_SELECT);
++ 	presel = (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_PRESEL);
+  	x = RNA_int_get(op->ptr, "x");
+  	y = RNA_int_get(op->ptr, "y");
+  	radius = RNA_int_get(op->ptr, "radius");
+***************
+*** 2972,2987 ****
+  	
+  	/* do selection */
+  	if (use_face_center) {
+- 		change = FALSE;
+  		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+  			BM_elem_flag_disable(efa, BM_ELEM_TAG);
+  			/* assume not touched */
+- 			if (select != uvedit_face_select_test(scene, efa, cd_loop_uv_offset)) {
+  				float cent[2];
+  				uv_poly_center(efa, cent, cd_loop_uv_offset);
+  				if (uv_inside_circle(cent, offset, ellipse)) {
+- 					BM_elem_flag_enable(efa, BM_ELEM_TAG);
+- 					change = TRUE;
+  				}
+  			}
+  		}
+--- 3141,3163 ----
+  	
+  	/* do selection */
+  	if (use_face_center) {
++ 		change = false;
++ 		BLI_ghash_clear(em->presel_verts, NULL, NULL);
++ 		BLI_ghash_clear(em->presel_faces, NULL, NULL);
+  		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+  			BM_elem_flag_disable(efa, BM_ELEM_TAG);
+  			/* assume not touched */
++ 			if (presel || (select != uvedit_face_select_test(scene, efa, cd_loop_uv_offset))) {
+  				float cent[2];
+  				uv_poly_center(efa, cent, cd_loop_uv_offset);
+  				if (uv_inside_circle(cent, offset, ellipse)) {
++ 					if (presel) {
++ 						uvedit_face_presel(em, efa);
++ 					}
++ 					else {
++ 						BM_elem_flag_enable(efa, BM_ELEM_TAG);
++ 						change = true;
++ 					}
+  				}
+  			}
+  		}
+***************
+*** 2992,3001 ****
+  		}
+  	}
+  	else {
+  		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
+  			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+  				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+- 				change |= uv_select_inside_ellipse(em, scene, select, offset, ellipse, l, luv, cd_loop_uv_offset);
+  			}
+  		}
+  	}
+--- 3168,3188 ----
+  		}
+  	}
+  	else {
++ 		BLI_ghash_clear(em->presel_verts, NULL, NULL);
+  		BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
++ 			if (!BM_elem_flag_test(efa, BM_ELEM_TAG)) continue;
++ 			if (ts->uv_flag & UV_SYNC_SELECTION) {
++ 				if (!BM_elem_flag_test(efa, BM_ELEM_SELECT)) continue;
++ 			}
+  			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+  				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
++ 				if (!presel) {
++ 					change |= uv_select_inside_ellipse(em, scene, select, offset, ellipse, l, luv, cd_loop_uv_offset);
++ 				}
++ 				else {
++ 					uv_presel_inside_ellipse(em, offset, ellipse, l, luv);
++ 					change = false;
++ 				}
+  			}
+  		}
+  	}

@@ -1,0 +1,38 @@
+***************
+*** 151,156 ****
+  
+  	ListBase timers;					/* active timers */
+  	struct wmTimer *autosavetimer;		/* timer for auto save */
+  } wmWindowManager;
+  
+  /* wmWindowManager.initialized */
+--- 153,162 ----
+  
+  	ListBase timers;					/* active timers */
+  	struct wmTimer *autosavetimer;		/* timer for auto save */
++ 	
++ 	struct ScrArea  *act_area;			/* mouseover area */
++ 	struct ARegion  *act_region;		/* mouseover region */
++ 	
+  } wmWindowManager;
+  
+  /* wmWindowManager.initialized */
+***************
+*** 197,202 ****
+  	
+  	ListBase subwindows;	/* opengl stuff for sub windows, see notes in wm_subwindow.c */
+  	ListBase gesture;		/* gesture stuff */
+  } wmWindow;
+  
+  /* should be something like DNA_EXCLUDE 
+--- 203,212 ----
+  	
+  	ListBase subwindows;	/* opengl stuff for sub windows, see notes in wm_subwindow.c */
+  	ListBase gesture;		/* gesture stuff */
++ 	
++ 	short gesture_level;	/* gesture type of gesture taking precedence momentarily */
++ 	short pad3[3];
++ 	
+  } wmWindow;
+  
+  /* should be something like DNA_EXCLUDE 

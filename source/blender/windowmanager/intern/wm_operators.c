@@ -65,6 +65,7 @@
 #include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
+#include "BKE_editmesh.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_library.h"
@@ -2871,14 +2872,15 @@ void WM_paint_cursor_end(wmWindowManager *wm, void *handle)
  * It stores 4 values (xmin, xmax, ymin, ymax) and event it ended with (event_type)
  */
 
-static int border_apply_rect(wmOperator *op)
+static int border_apply_rect(bContext *C, wmOperator *op, bool presel)
 {
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
+	int retval;
 	
 	if (rect->xmin == rect->xmax || rect->ymin == rect->ymax)
 		return 0;
-
+		
 	
 	/* operator arguments and storage. */
 	RNA_int_set(op->ptr, "xmin", min_ii(rect->xmin, rect->xmax));
@@ -2886,23 +2888,25 @@ static int border_apply_rect(wmOperator *op)
 	RNA_int_set(op->ptr, "xmax", max_ii(rect->xmin, rect->xmax));
 	RNA_int_set(op->ptr, "ymax", max_ii(rect->ymin, rect->ymax));
 
-	return 1;
-}
-
-static int border_apply(bContext *C, wmOperator *op, int gesture_mode)
-{
-	int retval;
-
-	if (!border_apply_rect(op))
-		return 0;
-	
-	/* XXX weak; border should be configured for this without reading event types */
-	if (RNA_struct_find_property(op->ptr, "gesture_mode") )
-		RNA_int_set(op->ptr, "gesture_mode", gesture_mode);
-
+	if (presel)
+		RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+		
 	retval = op->type->exec(C, op);
 	OPERATOR_RETVAL_CHECK(retval);
 
+	return 1;
+}
+
+static int border_apply(bContext *C, wmOperator *op)
+{
+	int retval;
+
+	if (!border_apply_rect(C, op, false))
+		return 0;
+	
+	retval = op->type->exec(C, op);
+	OPERATOR_RETVAL_CHECK(retval);
+	
 	return 1;
 }
 
@@ -2921,10 +2925,16 @@ static void wm_gesture_end(bContext *C, wmOperator *op)
 
 int WM_border_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	if (ISTWEAK(event->type))
+	wmWindow *win = CTX_wm_window(C);
+
+	if (ISTWEAK(event->type)) {
+		if (win->gesture_level > WM_GESTURE_RECT) return OPERATOR_CANCELLED;	
 		op->customdata = WM_gesture_new(C, event, WM_GESTURE_RECT);
-	else
+	}
+	else {
+		if (win->gesture_level > WM_GESTURE_CROSS_RECT) return OPERATOR_CANCELLED;	
 		op->customdata = WM_gesture_new(C, event, WM_GESTURE_CROSS_RECT);
+	}
 
 	/* add modal handler */
 	WM_event_add_modal_handler(C, op);
@@ -2951,7 +2961,7 @@ int WM_border_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			rect->xmax = event->x - sx;
 			rect->ymax = event->y - sy;
 		}
-		border_apply_rect(op);
+		border_apply_rect(C, op, true);
 
 		wm_gesture_tag_redraw(C);
 	}
@@ -2965,9 +2975,12 @@ int WM_border_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				break;
 			case GESTURE_MODAL_SELECT:
 			case GESTURE_MODAL_DESELECT:
+			case GESTURE_MODAL_PRESEL:
 			case GESTURE_MODAL_IN:
 			case GESTURE_MODAL_OUT:
-				if (border_apply(C, op, event->val)) {
+				if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+					RNA_int_set(op->ptr, "gesture_mode", event->val);
+				if (border_apply(C, op)) {
 					wm_gesture_end(C, op);
 					return OPERATOR_FINISHED;
 				}
@@ -2998,12 +3011,30 @@ void WM_border_select_cancel(bContext *C, wmOperator *op)
 /* works now only for selection or modal paint stuff, calls exec while hold mouse, exit on release */
 
 #ifdef GESTURE_MEMORY
-int circle_select_size = 25; /* XXX - need some operator memory thing! */
+int circle_select_size = 40; /* XXX - need some operator memory thing! */
 #endif
+
+static void gesture_circle_apply(bContext *C, wmOperator *op);
 
 int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+	wmWindow *win = CTX_wm_window(C);
+	Scene *scene = CTX_data_scene(C);
+	
+	if (win->gesture_level == WM_GESTURE_CIRCLE) {  /* already running: signal end*/
+		win->gesture_level = WM_GESTURE_NONE;		/* signal to running circle modal */
+		return OPERATOR_CANCELLED;
+	}
+	if (win->gesture_level > WM_GESTURE_CIRCLE) return OPERATOR_CANCELLED;	
+
 	op->customdata = WM_gesture_new(C, event, WM_GESTURE_CIRCLE);
+	
+	if (scene->toolsettings->use_presel) {
+		if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+			RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+		gesture_circle_apply(C, op);
+	}
+	RNA_int_set(op->ptr, "regionid", CTX_wm_region(C)->swinid);
 	
 	/* add modal handler */
 	WM_event_add_modal_handler(C, op);
@@ -3016,15 +3047,15 @@ int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 static void gesture_circle_apply(bContext *C, wmOperator *op)
 {
 	wmGesture *gesture = op->customdata;
-	rcti *rect = gesture->customdata;
+	rctf *rect = gesture->customdata;
 	
 	if (RNA_int_get(op->ptr, "gesture_mode") == GESTURE_MODAL_NOP)
 		return;
 
 	/* operator arguments and storage. */
-	RNA_int_set(op->ptr, "x", rect->xmin);
-	RNA_int_set(op->ptr, "y", rect->ymin);
-	RNA_int_set(op->ptr, "radius", rect->xmax);
+	RNA_int_set(op->ptr, "x", (int)rect->xmin);
+	RNA_int_set(op->ptr, "y", (int)rect->ymin);
+	RNA_int_set(op->ptr, "radius", (int)rect->xmax);
 	
 	if (op->type->exec) {
 		int retval;
@@ -3039,19 +3070,109 @@ static void gesture_circle_apply(bContext *C, wmOperator *op)
 int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	wmGesture *gesture = op->customdata;
-	rcti *rect = gesture->customdata;
+	rctf *rect = gesture->customdata;
+	ScrArea *newsa;
+	ARegion *newar = NULL;
+	wmWindowManager *wm = CTX_wm_manager(C);
+	wmWindow *win = CTX_wm_window(C);
+	Scene *scene = CTX_data_scene(C);
+	bool presel = scene->toolsettings->use_presel;
+	Object *obedit = CTX_data_edit_object(C);
+	Object *obact = CTX_data_active_object(C);
+	BMEditMesh *em;
 	int sx, sy;
-
+	float zfac;
+	
+	if (win->gesture_level > WM_GESTURE_CIRCLE) return OPERATOR_PASS_THROUGH;
+	
+	if (win->gesture_level == WM_GESTURE_NONE) {	/* signals end */
+		if ((obedit) && presel) {
+			em = BKE_editmesh_from_object(obedit);
+			BLI_ghash_clear(em->presel_verts, NULL, NULL);
+			BLI_ghash_clear(em->presel_edges, NULL, NULL);
+			BLI_ghash_clear(em->presel_faces, NULL, NULL);
+		}
+		wm_gesture_end(C, op);
+		WM_cursor_set(win, CURSOR_EDIT);
+		return OPERATOR_FINISHED;
+	}
+	
+	newsa = wm->act_area;
+	newar = wm->act_region;
+	if (newsa) {
+		if ((newsa->spacetype != SPACE_VIEW3D) && (newsa->spacetype != SPACE_IMAGE))
+			return OPERATOR_PASS_THROUGH;
+	}
+	if (newar) {
+		if (newar->regiontype != RGN_TYPE_WINDOW) return OPERATOR_PASS_THROUGH;
+	}
+	/* allow path/loop preselection */
+	if (event->ctrl) return OPERATOR_PASS_THROUGH;
+	if (event->alt) {
+		switch (event->val) {
+			case GESTURE_MODAL_CIRCLE_SIZE:
+			case GESTURE_MODAL_CIRCLE_ADD:
+			case GESTURE_MODAL_CIRCLE_SUB:
+				break;
+			default:
+				return OPERATOR_PASS_THROUGH;
+		}
+	}
+	/* if needed restart circle select in new region */
+	if (newar) {
+		if (newar->swinid != RNA_int_get(op->ptr, "regionid")) {
+			if (newsa->spacetype == SPACE_VIEW3D) {
+				CTX_wm_area_set(C, newsa);
+				CTX_wm_region_set(C, newar);
+				wm_gesture_end(C, op);
+				WM_operator_name_call(C, "VIEW3D_OT_select_circle", WM_OP_INVOKE_DEFAULT, NULL);
+				return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+			}
+			else if (newsa->spacetype == SPACE_IMAGE) {
+				CTX_wm_area_set(C, newsa);
+				CTX_wm_region_set(C, newar);
+				wm_gesture_end(C, op);
+				WM_operator_name_call(C, "UV_OT_circle_select", WM_OP_INVOKE_DEFAULT, NULL);
+				return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+			}
+			else {
+				return OPERATOR_PASS_THROUGH;
+			}
+		}
+	}
+	
+	WM_cursor_set(win, CURSOR_PENCIL);
+	
+		
 	if (event->type == MOUSEMOVE) {
+		
+		if (obedit) {
+			em = BKE_editmesh_from_object(obedit);
+			BLI_ghash_clear(em->presel_verts, NULL, NULL);
+			BLI_ghash_clear(em->presel_edges, NULL, NULL);
+			BLI_ghash_clear(em->presel_faces, NULL, NULL);
+		}
+		
 		wm_subwindow_getorigin(CTX_wm_window(C), gesture->swinid, &sx, &sy);
 
-		rect->xmin = event->x - sx;
-		rect->ymin = event->y - sy;
-
+		rect = gesture->customdata;
+		if (rect) {
+			rect->xmin = event->x - sx;
+			rect->ymin = event->y - sy;
+		}
 		wm_gesture_tag_redraw(C);
-
-		if (gesture->mode)
+		
+		/* Do select/deselect or preselection */
+		if (gesture->mode) {
 			gesture_circle_apply(C, op);
+		}
+		else if (presel) {
+			if (obact->mode & OB_MODE_EDIT) {
+				if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+					RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+				gesture_circle_apply(C, op);
+			}
+		}
 	}
 	else if (event->type == EVT_MODAL_MAP) {
 		float fac;
@@ -3064,43 +3185,82 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				else
 					rect->xmax += floor(fac);
 				if (rect->xmax < 1) rect->xmax = 1;
+				
+				if (presel) {
+					if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+						RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+					gesture_circle_apply(C, op);
+				}
+				
 				wm_gesture_tag_redraw(C);
 				break;
 			case GESTURE_MODAL_CIRCLE_ADD:
 				rect->xmax += 2 + rect->xmax / 10;
+				
+				if (presel) {
+					if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+						RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+					gesture_circle_apply(C, op);
+				}
+				
 				wm_gesture_tag_redraw(C);
 				break;
 			case GESTURE_MODAL_CIRCLE_SUB:
 				rect->xmax -= 2 + rect->xmax / 10;
 				if (rect->xmax < 1) rect->xmax = 1;
+				
+				if (presel) {
+					if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+						RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+					gesture_circle_apply(C, op);
+				}
+				
 				wm_gesture_tag_redraw(C);
 				break;
+			case GESTURE_MODAL_UNDO:
+				ED_undo_push(C, "Circle Select Stroke");
+				if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+					RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+				WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obact->data);
+				break;
+			case GESTURE_MODAL_PRESEL:
 			case GESTURE_MODAL_SELECT:
 			case GESTURE_MODAL_DESELECT:
+				if (wm->act_region != CTX_wm_region(C)) {
+					if (obedit) {
+						em = BKE_editmesh_from_object(obedit);
+						BLI_ghash_clear(em->presel_verts, NULL, NULL);
+						BLI_ghash_clear(em->presel_edges, NULL, NULL);
+						BLI_ghash_clear(em->presel_faces, NULL, NULL);
+					}
+					return OPERATOR_PASS_THROUGH;
+				}
 			case GESTURE_MODAL_NOP:
 				if (RNA_struct_find_property(op->ptr, "gesture_mode"))
 					RNA_int_set(op->ptr, "gesture_mode", event->val);
 
 				if (event->val != GESTURE_MODAL_NOP) {
 					/* apply first click */
+					if ((obedit) && presel) {
+						em = BKE_editmesh_from_object(obedit);
+						BLI_ghash_clear(em->presel_verts, NULL, NULL);
+						BLI_ghash_clear(em->presel_edges, NULL, NULL);
+						BLI_ghash_clear(em->presel_faces, NULL, NULL);
+					}
 					gesture_circle_apply(C, op);
 					gesture->mode = 1;
 					wm_gesture_tag_redraw(C);
 				}
 				break;
-
-			case GESTURE_MODAL_CANCEL:
-			case GESTURE_MODAL_CONFIRM:
-				wm_gesture_end(C, op);
-				return OPERATOR_FINISHED; /* use finish or we don't get an undo */
 		}
 	}
 	/* Allow view navigation??? */
 	/* note, this gives issues: 1) other modal ops run on top (border select), 2) middlemouse is used now 3) tablet/trackpad? */
-//	else {
-//		return OPERATOR_PASS_THROUGH;
-//	}
-
+	/* Solution : implement priority system */
+	else {
+		return OPERATOR_PASS_THROUGH;
+	}
+	
 	return OPERATOR_RUNNING_MODAL;
 }
 
@@ -3190,6 +3350,8 @@ static void tweak_gesture_modal(bContext *C, const wmEvent *event)
 void wm_tweakevent_test(bContext *C, wmEvent *event, int action)
 {
 	wmWindow *win = CTX_wm_window(C);
+	
+	if (win->gesture_level > WM_GESTURE_TWEAK) return;
 	
 	if (win->tweak == NULL) {
 		if (CTX_wm_region(C)) {
@@ -4360,14 +4522,14 @@ void wm_operatortype_init(void)
 static void gesture_circle_modal_keymap(wmKeyConfig *keyconf)
 {
 	static EnumPropertyItem modal_items[] = {
-		{GESTURE_MODAL_CANCEL,  "CANCEL", 0, "Cancel", ""},
-		{GESTURE_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
 		{GESTURE_MODAL_CIRCLE_ADD, "ADD", 0, "Add", ""},
 		{GESTURE_MODAL_CIRCLE_SUB, "SUBTRACT", 0, "Subtract", ""},
 		{GESTURE_MODAL_CIRCLE_SIZE, "SIZE", 0, "Size", ""},
 
 		{GESTURE_MODAL_SELECT,  "SELECT", 0, "Select", ""},
 		{GESTURE_MODAL_DESELECT, "DESELECT", 0, "DeSelect", ""},
+		{GESTURE_MODAL_PRESEL, "PRESEL", 0, "Preselection", ""},
+		{GESTURE_MODAL_UNDO, "UNDO", 0, "Push Undo State", ""},
 		{GESTURE_MODAL_NOP, "NOP", 0, "No Operation", ""},
 
 		{0, NULL, 0, NULL, NULL}
@@ -4382,28 +4544,16 @@ static void gesture_circle_modal_keymap(wmKeyConfig *keyconf)
 	keymap = WM_modalkeymap_add(keyconf, "View3D Gesture Circle", modal_items);
 
 	/* items for modal map */
-	WM_modalkeymap_add_item(keymap, ESCKEY,    KM_PRESS, KM_ANY, 0, GESTURE_MODAL_CANCEL);
-	WM_modalkeymap_add_item(keymap, RIGHTMOUSE, KM_ANY, KM_ANY, 0, GESTURE_MODAL_CANCEL);
+	WM_modalkeymap_add_item(keymap, SELECTMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_SELECT);
+	WM_modalkeymap_add_item(keymap, SELECTMOUSE, KM_RELEASE, 0, 0, GESTURE_MODAL_UNDO);
+	WM_modalkeymap_add_item(keymap, ACTIONMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_DESELECT);
+	WM_modalkeymap_add_item(keymap, ACTIONMOUSE, KM_RELEASE, 0, 0, GESTURE_MODAL_UNDO);
 
-	WM_modalkeymap_add_item(keymap, RETKEY, KM_PRESS, KM_ANY, 0, GESTURE_MODAL_CONFIRM);
-	WM_modalkeymap_add_item(keymap, PADENTER, KM_PRESS, 0, 0, GESTURE_MODAL_CONFIRM);
-
-	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_SELECT);
-
-	/* left mouse shift for deselect too */
-	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_PRESS, KM_SHIFT, 0, GESTURE_MODAL_DESELECT);
-	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_RELEASE, KM_SHIFT, 0, GESTURE_MODAL_NOP);
-
-	WM_modalkeymap_add_item(keymap, MIDDLEMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_DESELECT); //  default 2.4x
-	WM_modalkeymap_add_item(keymap, MIDDLEMOUSE, KM_RELEASE, 0, 0, GESTURE_MODAL_NOP); //  default 2.4x
-
-	WM_modalkeymap_add_item(keymap, LEFTMOUSE, KM_RELEASE, 0, 0, GESTURE_MODAL_NOP);
-
-	WM_modalkeymap_add_item(keymap, WHEELUPMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_CIRCLE_SUB);
-	WM_modalkeymap_add_item(keymap, PADMINUS, KM_PRESS, 0, 0, GESTURE_MODAL_CIRCLE_SUB);
-	WM_modalkeymap_add_item(keymap, WHEELDOWNMOUSE, KM_PRESS, 0, 0, GESTURE_MODAL_CIRCLE_ADD);
-	WM_modalkeymap_add_item(keymap, PADPLUSKEY, KM_PRESS, 0, 0, GESTURE_MODAL_CIRCLE_ADD);
-	WM_modalkeymap_add_item(keymap, MOUSEPAN, 0, 0, 0, GESTURE_MODAL_CIRCLE_SIZE);
+	WM_modalkeymap_add_item(keymap, WHEELUPMOUSE, KM_PRESS, KM_ALT, 0, GESTURE_MODAL_CIRCLE_SUB);
+	WM_modalkeymap_add_item(keymap, PADMINUS, KM_PRESS, KM_ALT, 0, GESTURE_MODAL_CIRCLE_SUB);
+	WM_modalkeymap_add_item(keymap, WHEELDOWNMOUSE, KM_PRESS, KM_ALT, 0, GESTURE_MODAL_CIRCLE_ADD);
+	WM_modalkeymap_add_item(keymap, PADPLUSKEY, KM_PRESS, KM_ALT, 0, GESTURE_MODAL_CIRCLE_ADD);
+	WM_modalkeymap_add_item(keymap, MOUSEPAN, 0, KM_ALT, 0, GESTURE_MODAL_CIRCLE_SIZE);
 
 	/* assign map to operators */
 	WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_circle");
@@ -4452,6 +4602,7 @@ static void gesture_border_modal_keymap(wmKeyConfig *keyconf)
 		{GESTURE_MODAL_CANCEL,  "CANCEL", 0, "Cancel", ""},
 		{GESTURE_MODAL_SELECT,  "SELECT", 0, "Select", ""},
 		{GESTURE_MODAL_DESELECT, "DESELECT", 0, "DeSelect", ""},
+		{GESTURE_MODAL_PRESEL, "PRESEL", 0, "Preselection", ""},
 		{GESTURE_MODAL_BEGIN,   "BEGIN", 0, "Begin", ""},
 		{0, NULL, 0, NULL, NULL}
 	};

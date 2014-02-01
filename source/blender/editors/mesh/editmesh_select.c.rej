@@ -1,0 +1,17 @@
+***************
+*** 611,617 ****
+  		struct { float mval_fl[2], pass; float dist, lastIndex, closestIndex; BMFace *closest; } data;
+  		static int lastSelectedIndex = 0;
+  		static BMFace *lastSelected = NULL;
+- 
+  		if (lastSelected && BM_face_at_index(vc->em->bm, lastSelectedIndex) != lastSelected) {
+  			lastSelectedIndex = 0;
+  			lastSelected = NULL;
+--- 612,618 ----
+  		struct { float mval_fl[2], pass; float dist, lastIndex, closestIndex; BMFace *closest; } data;
+  		static int lastSelectedIndex = 0;
+  		static BMFace *lastSelected = NULL;
++ 		
+  		if (lastSelected && BM_face_at_index(vc->em->bm, lastSelectedIndex) != lastSelected) {
+  			lastSelectedIndex = 0;
+  			lastSelected = NULL;

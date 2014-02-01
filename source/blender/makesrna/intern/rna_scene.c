@@ -1576,6 +1576,11 @@ static void rna_FreestyleSettings_active_lineset_index_set(PointerRNA *ptr, int 
 	BKE_freestyle_lineset_set_active_index(config, value);
 }
 
+static void rna_Presel_notify(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *UNUSED(ptr))
+{
+	WM_main_add_notifier(NC_GEOM | ND_SELECT, NULL); 
+}
+
 #else
 
 static void rna_def_transform_orientation(BlenderRNA *brna)
@@ -1737,13 +1742,23 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_enum_items(prop, uv_sculpt_relaxation_items);
 	RNA_def_property_ui_text(prop, "Relaxation Method", "Algorithm used for UV relaxation");
 
+	prop = RNA_def_property(srna, "use_presel", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "use_presel", 1);
+	RNA_def_property_ui_text(prop, "Use Preselection", "Turn on/off preselection");
+	RNA_def_property_update(prop, NC_GEOM | ND_PRESELECT, NULL);	/* update views */
+	
+	prop = RNA_def_property(srna, "use_prop_presel", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "use_prop_presel", 1);
+	RNA_def_property_ui_text(prop, "Use Proportional Preselection", "Turn on/off proportional preselection");
+	RNA_def_property_update(prop, NC_GEOM | ND_PRESELECT | NA_ADDED, NULL);	/* update views and proportional presel*/
+	
 	/* Transform */
 	prop = RNA_def_property(srna, "proportional_edit", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "proportional");
 	RNA_def_property_enum_items(prop, proportional_editing_items);
 	RNA_def_property_ui_text(prop, "Proportional Editing",
 	                         "Proportional Editing mode, allows transforms with distance fall-off");
-	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
+	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_Presel_notify"); /* header redraw and preselection*/
 
 	prop = RNA_def_property(srna, "use_proportional_edit_objects", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "proportional_objects", 0);
@@ -1761,7 +1776,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "prop_mode");
 	RNA_def_property_enum_items(prop, proportional_falloff_items);
 	RNA_def_property_ui_text(prop, "Proportional Editing Falloff", "Falloff type for proportional editing mode");
-	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
+	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_Presel_notify"); /* header redraw and preselection*/
 
 	prop = RNA_def_property(srna, "proportional_size", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "proportional_size");
@@ -1775,6 +1790,11 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_ui_range(prop, 0.01, 10.0, 10.0, 2);
 	RNA_def_property_update(prop, NC_GEOM | ND_DATA, NULL);
 
+	prop = RNA_def_property(srna, "show_presel_normals", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "show_presel_normals", 0);
+	RNA_def_property_ui_text(prop, "Show Normals", "Show Normal on Preselected Face or Vert");
+	RNA_def_property_update(prop, NC_GEOM | ND_PRESELECT, NULL);
+	
 	prop = RNA_def_property(srna, "double_threshold", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "doublimit");
 	RNA_def_property_ui_text(prop, "Double Threshold", "Limit for removing duplicates and 'Auto Merge'");
@@ -1884,7 +1904,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "uv_flag", UV_SYNC_SELECTION);
 	RNA_def_property_ui_text(prop, "UV Sync Selection", "Keep UV and edit mode mesh selection in sync");
 	RNA_def_property_ui_icon(prop, ICON_EDIT, 0);
-	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, "rna_Presel_notify");
 
 	prop = RNA_def_property(srna, "show_uv_local_view", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "uv_flag", UV_SHOW_SAME_IMAGE);
@@ -1989,6 +2009,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_flag(prop, PROP_NEVER_NULL);
 	RNA_def_property_struct_type(prop, "MeshStatVis");
 	RNA_def_property_ui_text(prop, "Mesh Statistics Visualization", NULL);
+	
 }
 
 static void rna_def_unified_paint_settings(BlenderRNA  *brna)

@@ -1,0 +1,30 @@
+***************
+*** 2099,2104 ****
+  	RNA_def_property_ui_text(prop, "Active Vert/Edge/Face", "");
+  	RNA_def_property_update(prop, 0, "rna_userdef_update");
+  	
+  	prop = RNA_def_property(srna, "scope_back", PROP_FLOAT, PROP_COLOR_GAMMA);
+  	RNA_def_property_float_sdna(prop, NULL, "preview_back");
+  	RNA_def_property_array(prop, 4);
+--- 2119,2139 ----
+  	RNA_def_property_ui_text(prop, "Active Vert/Edge/Face", "");
+  	RNA_def_property_update(prop, 0, "rna_userdef_update");
+  	
++ 	prop = RNA_def_property(srna, "presel_select", PROP_FLOAT, PROP_COLOR_GAMMA);
++ 	RNA_def_property_array(prop, 4);
++ 	RNA_def_property_ui_text(prop, "Preselection Selected", "");
++ 	RNA_def_property_update(prop, 0, "rna_userdef_update");
++ 	
++ 	prop = RNA_def_property(srna, "presel_noselect", PROP_FLOAT, PROP_COLOR_GAMMA);
++ 	RNA_def_property_array(prop, 4);
++ 	RNA_def_property_ui_text(prop, "Preselection Not Selected", "");
++ 	RNA_def_property_update(prop, 0, "rna_userdef_update");
++ 	
++ 	prop = RNA_def_property(srna, "presel_prop", PROP_FLOAT, PROP_COLOR_GAMMA);
++ 	RNA_def_property_array(prop, 4);
++ 	RNA_def_property_ui_text(prop, "Preselection Proportional", "");
++ 	RNA_def_property_update(prop, 0, "rna_userdef_update");
++ 	
+  	prop = RNA_def_property(srna, "scope_back", PROP_FLOAT, PROP_COLOR_GAMMA);
+  	RNA_def_property_float_sdna(prop, NULL, "preview_back");
+  	RNA_def_property_array(prop, 4);

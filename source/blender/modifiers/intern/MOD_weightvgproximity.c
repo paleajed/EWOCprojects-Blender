@@ -99,7 +99,7 @@ static void get_vert2geom_distance(int numVerts, float (*v_cos)[3],
 	}
 	if (dist_f) {
 		/* Create a bvh-tree of the given target's faces. */
-		bvhtree_from_mesh_faces(&treeData_f, target, 0.0, 2, 6);
+		bvhtree_from_mesh_faces(&treeData_f, target, 0.0, 2, 6, true);
 		if (treeData_f.tree == NULL) {
 			OUT_OF_MEMORY();
 			return;

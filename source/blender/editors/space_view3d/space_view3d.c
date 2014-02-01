@@ -43,12 +43,14 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
 #include "BKE_icons.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 
+#include "ED_mesh.h"
 #include "ED_render.h"
 #include "ED_space_api.h"
 #include "ED_screen.h"
@@ -824,6 +826,7 @@ static void view3d_main_area_listener(bScreen *sc, ScrArea *sa, ARegion *ar, wmN
 				case ND_DATA:
 				case ND_VERTEX_GROUP:
 				case ND_SELECT:
+				case ND_PRESELECT:
 					ED_region_tag_redraw(ar);
 					break;
 			}
@@ -900,6 +903,19 @@ static void view3d_main_area_listener(bScreen *sc, ScrArea *sa, ARegion *ar, wmN
 					rv3d->rflag |= RV3D_GPULIGHT_UPDATE;
 				}
 				ED_region_tag_redraw(ar);
+				if (wmn->action == NA_TRANSFORMED) {
+					if (sc->scene->obedit) {
+						if (sc->scene->obedit->type == OB_MESH) {
+							BMEditMesh *em = BKE_editmesh_from_object(sc->scene->obedit);
+							BLI_ghash_clear(em->presel_verts, NULL, NULL);
+							BLI_ghash_clear(em->presel_edges, NULL, NULL);
+							BLI_ghash_clear(em->presel_faces, NULL, NULL);
+						}
+					}
+				if (sc->scene->toolsettings->proportional == PROP_EDIT_PROJECTED) {
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
+					}
+				}
 			}
 			break;
 		case NC_ID:
@@ -939,7 +955,10 @@ static void view3d_main_area_cursor(wmWindow *win, ScrArea *UNUSED(sa), ARegion 
 	Scene *scene = win->screen->scene;
 
 	if (scene->obedit) {
-		WM_cursor_set(win, CURSOR_EDIT);
+		if (win->gesture_level == WM_GESTURE_CIRCLE)
+			WM_cursor_set(win, CURSOR_PENCIL);
+		else
+			WM_cursor_set(win, CURSOR_EDIT);
 	}
 	else {
 		WM_cursor_set(win, CURSOR_STD);
@@ -981,6 +1000,10 @@ static void view3d_header_area_listener(bScreen *UNUSED(sc), ScrArea *UNUSED(sa)
 			break;
 		case NC_SPACE:
 			if (wmn->data == ND_SPACE_VIEW3D)
+				ED_region_tag_redraw(ar);
+			break;
+		case NC_GEOM:
+			if (wmn->data == ND_SELECT)
 				ED_region_tag_redraw(ar);
 			break;
 	}
@@ -1122,7 +1145,7 @@ static void view3d_props_area_listener(bScreen *UNUSED(sc), ScrArea *UNUSED(sa),
 }
 
 /*area (not region) level listener*/
-static void space_view3d_listener(bScreen *UNUSED(sc), ScrArea *sa, struct wmNotifier *wmn)
+static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *wmn)
 {
 	View3D *v3d = sa->spacedata.first;
 
@@ -1134,6 +1157,9 @@ static void space_view3d_listener(bScreen *UNUSED(sc), ScrArea *sa, struct wmNot
 					if (v3d->flag2 & V3D_RENDER_OVERRIDE)
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 					break;
+				case ND_TRANSFORM_DONE:
+					/* Adapt proportional mode preselection */
+					EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 			}
 			break;
 		case NC_WORLD:
@@ -1152,6 +1178,54 @@ static void space_view3d_listener(bScreen *UNUSED(sc), ScrArea *sa, struct wmNot
 					break;
 			}
 			break;
+		case NC_GEOM:
+			switch (wmn->data) {
+				case ND_DATA:
+					switch (wmn->action) {
+						case NA_ADDED:
+							/* Adapt proportional mode preselection */
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+							
+							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+							break;
+					}
+					break;
+				case ND_PRESELECT:
+					switch (wmn->action) {
+						case NA_ADDED:
+							/* Adapt proportional mode preselection */
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+							
+							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+							break;
+					}
+					break;
+				case ND_SELECT:
+					if (sc->scene->toolsettings->uv_flag & UV_SYNC_SELECTION) {
+						EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+					}
+					else {
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
+					}
+					
+					ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+					break;
+			}
+			break;
+		case NC_OBJECT:
+			switch (wmn->data) {
+				case ND_TRANSFORM:
+					/* Adapt proportional mode preselection */
+					if (!(sc->scene->toolsettings->proportional_size == sc->scene->toolsettings->old_proportional_size)) {
+						sc->scene->toolsettings->old_proportional_size = sc->scene->toolsettings->proportional_size;
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
+						
+						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+						break;
+					}
+			}
+			break;
+
 	}
 
 	/* removed since BKE_image_user_frame_calc is now called in view3d_draw_bgpic because screen_ops doesnt call the notifier. */

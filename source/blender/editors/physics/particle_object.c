@@ -669,7 +669,7 @@ static int connect_hair(Scene *scene, Object *ob, ParticleSystem *psys)
 	for (i=0; i<numverts; i++)
 		mul_m4_v3(ob->obmat, mvert[i].co);
 
-	bvhtree_from_mesh_faces(&bvhtree, dm, 0.0, 2, 6);
+	bvhtree_from_mesh_faces(&bvhtree, dm, 0.0, 2, 6, true);
 
 	for (i=0, pa= psys->particles; i<psys->totpart; i++, pa++) {
 		key = pa->hair;

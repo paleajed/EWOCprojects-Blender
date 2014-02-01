@@ -941,6 +941,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 	char cmode = constraintModeToChar(t);
 	bool handled = false;
 
+	ToolSettings *ts = CTX_data_tool_settings(t->context);
 	t->redraw |= handleMouseInput(t, &t->mouse, event);
 
 	/* Handle modal numinput events first, if already activated. */
@@ -1204,6 +1205,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 					t->prop_size *= fac;
 					if (t->spacetype == SPACE_VIEW3D && t->persp != RV3D_ORTHO)
 						t->prop_size = min_ff(t->prop_size, ((View3D *)t->view)->far);
+					ts->proportional_size = t->prop_size;
 					calculatePropRatio(t);
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -1214,6 +1216,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 					t->prop_size *= 1.1f;
 					if (t->spacetype == SPACE_VIEW3D && t->persp != RV3D_ORTHO)
 						t->prop_size = min_ff(t->prop_size, ((View3D *)t->view)->far);
+					ts->proportional_size = t->prop_size;
 					calculatePropRatio(t);
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -1222,6 +1225,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 			case TFM_MODAL_PROPSIZE_DOWN:
 				if (t->flag & T_PROP_EDIT) {
 					t->prop_size *= 0.90909090f;
+					ts->proportional_size = t->prop_size;
 					calculatePropRatio(t);
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -1389,6 +1393,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 					t->prop_size *= 1.1f;
 					if (t->spacetype == SPACE_VIEW3D && t->persp != RV3D_ORTHO)
 						t->prop_size = min_ff(t->prop_size, ((View3D *)t->view)->far);
+					ts->proportional_size = t->prop_size;
 					calculatePropRatio(t);
 					t->redraw = TREDRAW_HARD;
 					handled = true;
@@ -1408,6 +1413,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 			case PADMINUS:
 				if (event->alt && t->flag & T_PROP_EDIT) {
 					t->prop_size *= 0.90909090f;
+					ts->proportional_size = t->prop_size;
 					calculatePropRatio(t);
 					t->redraw = TREDRAW_HARD;
 					handled = true;
@@ -1517,14 +1523,23 @@ int calculateTransformCenter(bContext *C, int centerMode, float cent3d[3], float
 	createTransData(C, t);              // make TransData structs from selection
 
 	t->around = centerMode;             // override userdefined mode
-
+	
 	if (t->total == 0) {
 		success = FALSE;
 	}
 	else {
 		success = TRUE;
 
-		calculateCenter(t);
+		if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
+			int savflag = t->flag;
+			t->flag &= ~T_MANIP_SET;
+			t->flag &= ~T_MANIP_FREE;
+			calculateCenter(t);
+			t->flag = savflag;
+		}
+		else {
+			calculateCenter(t);
+		}
 
 		if (cent2d) {
 			copy_v2_v2(cent2d, t->center2d);
@@ -1980,6 +1995,7 @@ int initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *even
 	int options = 0;
 	PropertyRNA *prop;
 
+	RegionView3D *rv3d = CTX_wm_region_view3d(C);
 	t->context = C;
 
 	/* added initialize, for external calls to set stuff in TransInfo, like undo string */
@@ -2021,6 +2037,8 @@ int initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *even
 		t->draw_handle_view = ED_region_draw_cb_activate(t->ar->type, drawTransformView, t, REGION_DRAW_POST_VIEW);
 		t->draw_handle_pixel = ED_region_draw_cb_activate(t->ar->type, drawTransformPixel, t, REGION_DRAW_POST_PIXEL);
 		t->draw_handle_cursor = WM_paint_cursor_activate(CTX_wm_manager(C), helpline_poll, drawHelpline, t);
+
+		copy_m4_m4(t->manip_rootmat, rv3d->twsetmat);
 	}
 	else if (t->spacetype == SPACE_IMAGE) {
 		unit_m3(t->spacemtx);
@@ -2031,7 +2049,6 @@ int initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *even
 	else if (t->spacetype == SPACE_CLIP) {
 		unit_m3(t->spacemtx);
 		t->draw_handle_view = ED_region_draw_cb_activate(t->ar->type, drawTransformView, t, REGION_DRAW_POST_VIEW);
-		t->draw_handle_cursor = WM_paint_cursor_activate(CTX_wm_manager(C), helpline_poll, drawHelpline, t);
 	}
 	else if (t->spacetype == SPACE_NODE) {
 		unit_m3(t->spacemtx);
@@ -2247,7 +2264,6 @@ int initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *even
 			if (constraint_axis[2]) {
 				t->con.mode |= CON_AXIS2;
 			}
-
 			setUserConstraint(t, t->current_orientation, t->con.mode, "%s");
 		}
 	}
@@ -3846,6 +3862,9 @@ static void applyRotationValue(TransInfo *t, float angle, float axis[3])
 
 static void applyRotation(TransInfo *t, const int UNUSED(mval[2]))
 {
+	RegionView3D *rv3d;
+	float rotmat[4][4];
+	float mat4[4][4];
 	char str[MAX_INFO_LEN];
 	size_t ofs = 0;
 
@@ -3888,7 +3907,22 @@ static void applyRotation(TransInfo *t, const int UNUSED(mval[2]))
 
 	t->values[0] = final;
 	
-	applyRotationValue(t, final, t->axis);
+	if (!(t->flag & T_MANIP_SET)) {
+		applyRotationValue(t, final, t->axis);
+	}
+	if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
+		/* Rotate manipulator */
+		rv3d = CTX_wm_region_view3d(t->context);
+		copy_m4_m4(rv3d->twsetmat, t->manip_rootmat);
+		/* rotate */
+		axis_angle_to_mat4(rotmat, t->axis, t->values[0]);
+		mul_m4_m4m4(mat4, rotmat, rv3d->twsetmat);
+		/* copy location */
+		mat4[3][0] = rv3d->twsetmat[3][0];
+		mat4[3][1] = rv3d->twsetmat[3][1];
+		mat4[3][2] = rv3d->twsetmat[3][2];
+		copy_m4_m4(rv3d->twsetmat, mat4);
+	}
 	
 	recalcData(t);
 	
@@ -3956,11 +3990,13 @@ static void applyTrackballValue(TransInfo *t, const float axis1[3], const float 
 
 static void applyTrackball(TransInfo *t, const int UNUSED(mval[2]))
 {
+	RegionView3D *rv3d = CTX_wm_region_view3d(t->context);
 	char str[MAX_INFO_LEN];
 	size_t ofs = 0;
 	float axis1[3], axis2[3];
 	float mat[3][3], totmat[3][3], smat[3][3];
 	float phi[2];
+	float rotmat1[4][4], rotmat2[4][4], mat4[4][4];
 
 	copy_v3_v3(axis1, t->persinv[0]);
 	copy_v3_v3(axis2, t->persinv[1]);
@@ -3999,8 +4035,24 @@ static void applyTrackball(TransInfo *t, const int UNUSED(mval[2]))
 	// TRANSFORM_FIX_ME
 	//copy_m3_m3(t->mat, mat);	// used in manipulator
 
-	applyTrackballValue(t, axis1, axis2, phi);
-
+	if (!(t->flag & T_MANIP_SET)) {
+		applyTrackballValue(t, axis1, axis2, phi);
+	}
+	if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
+		/* Trackball rotate manipulator */
+		rv3d = CTX_wm_region_view3d(t->context);
+		copy_m4_m4(rv3d->twsetmat, t->manip_rootmat);
+		/* rotate */
+		axis_angle_to_mat4(rotmat1, axis1, phi[0]);
+		axis_angle_to_mat4(rotmat2, axis2, phi[1]);
+		mul_m4_m4m4(mat4, rotmat1, rv3d->twsetmat);
+		mul_m4_m4m4(mat4, rotmat2, mat4);
+		/* copy location */
+		mat4[3][0] = rv3d->twsetmat[3][0];
+		mat4[3][1] = rv3d->twsetmat[3][1];
+		mat4[3][2] = rv3d->twsetmat[3][2];
+		copy_m4_m4(rv3d->twsetmat, mat4);
+	}
 	recalcData(t);
 
 	ED_area_headerprint(t->sa, str);
@@ -4218,8 +4270,10 @@ static void applyTranslationValue(TransInfo *t, float vec[3])
 /* uses t->vec to store actual translation in */
 static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 {
+	View3D *v3d = CTX_wm_view3d(t->context);
+	RegionView3D *rv3d = CTX_wm_region_view3d(t->context);
 	char str[MAX_INFO_LEN];
-
+	
 	if (t->con.mode & CON_APPLY) {
 		float pvec[3] = {0.0f, 0.0f, 0.0f};
 		float tvec[3];
@@ -4241,19 +4295,30 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 		headerTranslation(t, t->values, str);
 	}
 
-	applyTranslationValue(t, t->values);
-
-	/* evil hack - redo translation if clipping needed */
-	if (t->flag & T_CLIP_UV && clipUVTransform(t, t->values, 0)) {
+	if (!(t->flag & T_MANIP_SET)) {
 		applyTranslationValue(t, t->values);
-
-		/* In proportional edit it can happen that */
-		/* vertices in the radius of the brush end */
-		/* outside the clipping area               */
-		/* XXX HACK - dg */
-		if (t->flag & T_PROP_EDIT_ALL) {
-			clipUVData(t);
+	
+		/* evil hack - redo translation if clipping needed */
+		if (t->flag & T_CLIP_UV && clipUVTransform(t, t->values, 0)) {
+			applyTranslationValue(t, t->values);
+	
+			/* In proportional edit it can happen that */
+			/* vertices in the radius of the brush end */
+			/* outside the clipping area               */
+			/* XXX HACK - dg */
+			if (t->flag & T_PROP_EDIT_ALL) {
+				clipUVData(t);
+			}
 		}
+	}
+	
+	if (t->flag & T_MANIP_SET) {
+		v3d->around = V3D_FREE;		/* switch to "Manipulator" pivot */
+	}
+	if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
+		/* Translate manipulator */
+		copy_m4_m4(rv3d->twsetmat, t->manip_rootmat);
+		add_v3_v3(rv3d->twsetmat[3], t->values);
 	}
 
 	recalcData(t);

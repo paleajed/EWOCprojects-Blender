@@ -79,6 +79,8 @@
 #include "BKE_customdata.h"
 #include "BKE_bvhutils.h"
 
+struct BMEditMesh;
+struct BMVert;
 struct CCGElem;
 struct CCGKey;
 struct MVert;
@@ -88,14 +90,12 @@ struct MTFace;
 struct Object;
 struct Scene;
 struct Mesh;
-struct BMEditMesh;
 struct KeyBlock;
 struct ModifierData;
 struct MCol;
 struct ColorBand;
 struct GPUVertexAttribs;
 struct GPUDrawObject;
-struct BMEditMesh;
 struct ListBase;
 struct PBVH;
 
@@ -449,6 +449,21 @@ struct DerivedMesh {
 	                           void (*setMaterial)(void *userData, int, void *attribs),
 	                           bool (*setFace)(void *userData, int index), void *userData);
 
+	/** Draw all proportional highlighted elements */
+	void (*drawPreselVerts)(struct BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4]);
+	void (*drawPreselEdges)(struct BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4]);
+	void (*drawPreselEdgesInterp)(struct BMVert *eve, struct BMEditMesh *em, DerivedMesh *dm, unsigned char grad_col[4]);
+	void (*drawPreselFaces)(struct BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4]);
+	void (*drawPreselPropFaces)(struct BMEditMesh *em, DerivedMesh *dm, unsigned char prop_col[4], bool occluded, bool selected);
+	void (*drawPreselFaceNormal)(int bmindex, DerivedMesh *dm,
+	                                void (*func)(void *userData, int index,
+	                                             const float cent[3], const float no[3]),
+									unsigned char normal_col[4], void *userData);
+	void (*drawPreselVertNormal)(int bmindex, DerivedMesh *dm,
+	                                void (*func)(void *userData, int index,
+	                                             const float cent[3], const float no[3]),
+									unsigned char normal_col[4], void *userData);
+	
 	/** Release reference to the DerivedMesh. This function decides internally
 	 * if the DerivedMesh will be freed, or cached for later use. */
 	void (*release)(DerivedMesh *dm);

@@ -162,6 +162,17 @@ int WM_keymap_map_type_get(wmKeyMapItem *kmi)
 	return KMI_TYPE_KEYBOARD;
 }
 
+static void keymap_item_set_id(wmKeyMap *keymap, wmKeyMapItem *kmi)
+{
+	keymap->kmi_id++;
+	if ((keymap->flag & KEYMAP_USER) == 0) {
+		kmi->id = keymap->kmi_id;
+	}
+	else {
+		kmi->id = -keymap->kmi_id; /* User defined keymap entries have negative ids */
+	}
+}
+
 
 /**************************** Keymap Diff Item *********************************
  * Item in a diff keymap, used for saving diff of keymaps in user preferences */
@@ -262,6 +273,9 @@ void WM_keyconfig_set_active(wmWindowManager *wm, const char *idname)
 {
 	/* setting a different key configuration as active: we ensure all is
 	 * updated properly before and after making the change */
+	wmKeyMap *km, *kmu;
+	wmKeyMapItem *kmi, *kmui, *kmui_add;
+	bool found;
 
 	WM_keyconfig_update(wm);
 
@@ -269,6 +283,86 @@ void WM_keyconfig_set_active(wmWindowManager *wm, const char *idname)
 
 	WM_keyconfig_update_tag(NULL, NULL);
 	WM_keyconfig_update(wm);
+	
+	/* adds preselection shortcuts if not there yet - only interim code */
+	for (kmu = wm->userconf->keymaps.first; kmu; kmu = kmu->next) {
+		if (strcmp(kmu->idname, "Mesh") == 0) {
+			found = 0;
+			for (kmui = kmu->items.first; kmui; kmui = kmui->next) {
+				if (strcmp(kmui->idname, "MESH_OT_loop_presel") == 0)
+					found = 1;
+			}
+			if (!found) {
+				for (km = wm->defaultconf->keymaps.first; km; km = km->next) {
+					if (strcmp(km->idname, "Mesh") == 0) {
+						for (kmi = km->items.first; kmi; kmi = kmi->next) {
+							if (strcmp(kmi->idname, "MESH_OT_loop_presel") == 0) {
+								kmui_add = wm_keymap_item_copy(kmi);
+								keymap_item_set_id(kmu, kmui_add);
+								BLI_addtail(&kmu->items, kmui_add);
+							}
+						}
+					}
+				}
+			}
+			found = 0;
+			for (kmui = kmu->items.first; kmui; kmui = kmui->next) {
+				if (strcmp(kmui->idname, "MESH_OT_edgering_presel") == 0)
+					found = 1;
+			}
+			if (!found) {
+				for (km = wm->defaultconf->keymaps.first; km; km = km->next) {
+					if (strcmp(km->idname, "Mesh") == 0) {
+						for (kmi = km->items.first; kmi; kmi = kmi->next) {
+							if (strcmp(kmi->idname, "MESH_OT_edgering_presel") == 0) {
+								kmui_add = wm_keymap_item_copy(kmi);
+								keymap_item_set_id(kmu, kmui_add);
+								BLI_addtail(&kmu->items, kmui_add);
+							}
+						}
+					}
+				}
+			}
+			found = 0;
+			for (kmui = kmu->items.first; kmui; kmui = kmui->next) {
+				if (strcmp(kmui->idname, "MESH_OT_shortest_path_presel") == 0)
+					found = 1;
+			}
+			if (!found) {
+				for (km = wm->defaultconf->keymaps.first; km; km = km->next) {
+					if (strcmp(km->idname, "Mesh") == 0) {
+						for (kmi = km->items.first; kmi; kmi = kmi->next) {
+							if (strcmp(kmi->idname, "MESH_OT_shortest_path_presel") == 0) {
+								kmui_add = wm_keymap_item_copy(kmi);
+								keymap_item_set_id(kmu, kmui_add);
+								BLI_addtail(&kmu->items, kmui_add);
+							}
+						}
+					}
+				}
+			}
+		}
+		if (strcmp(kmu->idname, "3D View") == 0) {
+			found = 0;
+			for (kmui = kmu->items.first; kmui; kmui = kmui->next) {
+				if (strcmp(kmui->idname, "VIEW3D_OT_preselect") == 0)
+					found = 1;
+			}
+			if (!found) {
+				for (km = wm->defaultconf->keymaps.first; km; km = km->next) {
+					if (strcmp(km->idname, "3D View") == 0) {
+						for (kmi = km->items.first; kmi; kmi = kmi->next) {
+							if (strcmp(kmi->idname, "VIEW3D_OT_preselect") == 0) {
+								kmui_add = wm_keymap_item_copy(kmi);
+								keymap_item_set_id(kmu, kmui_add);
+								BLI_addtail(&kmu->items, kmui_add);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 /********************************** Keymap *************************************
@@ -353,17 +447,6 @@ static void keymap_event_set(wmKeyMapItem *kmi, short type, short val, int modif
 		kmi->ctrl =  (modifier & KM_CTRL)  ? KM_MOD_FIRST : ((modifier & KM_CTRL2)  ? KM_MOD_SECOND : FALSE);
 		kmi->alt =   (modifier & KM_ALT)   ? KM_MOD_FIRST : ((modifier & KM_ALT2)   ? KM_MOD_SECOND : FALSE);
 		kmi->oskey = (modifier & KM_OSKEY) ? KM_MOD_FIRST : ((modifier & KM_OSKEY2) ? KM_MOD_SECOND : FALSE);
-	}
-}
-
-static void keymap_item_set_id(wmKeyMap *keymap, wmKeyMapItem *kmi)
-{
-	keymap->kmi_id++;
-	if ((keymap->flag & KEYMAP_USER) == 0) {
-		kmi->id = keymap->kmi_id;
-	}
-	else {
-		kmi->id = -keymap->kmi_id; /* User defined keymap entries have negative ids */
 	}
 }
 
@@ -1130,7 +1213,7 @@ static wmKeyMap *wm_keymap_preset(wmWindowManager *wm, wmKeyMap *km)
 void WM_keyconfig_update(wmWindowManager *wm)
 {
 	wmKeyMap *km, *defaultmap, *addonmap, *usermap, *kmn;
-	wmKeyMapItem *kmi;
+	wmKeyMapItem *kmi, *kmi_add;
 	wmKeyMapDiffItem *kmdi;
 	int compat_update = 0;
 

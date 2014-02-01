@@ -1,0 +1,259 @@
+--- source/blender/editors/transform/transform_snap.c	(revision 60799)
++++ source/blender/editors/transform/transform_snap.c	(working copy)
+@@ -438,8 +438,12 @@
+ 	{
+ 		setSnappingCallback(t);
+ 
++		/* When transforming manipulator, always snap */
++		if (t->tsnap.applySnap != NULL && (t->flag & T_MANIP_SET)) {
++			t->tsnap.modeSelect = SNAP_ALL;
++		}
+ 		/* Edit mode */
+-		if (t->tsnap.applySnap != NULL && // A snapping function actually exist
++		else if (t->tsnap.applySnap != NULL && // A snapping function actually exist
+ 		    (obedit != NULL && ELEM4(obedit->type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE)) ) // Temporary limited to edit mode meshes, armature, curves
+ 		{
+ 			/* Exclude editmesh if using proportional edit */
+@@ -544,21 +548,26 @@
+ {
+ 	t->tsnap.calcSnap = CalcSnapGeometry;
+ 
+-	switch (t->tsnap.target) {
+-		case SCE_SNAP_TARGET_CLOSEST:
+-			t->tsnap.targetSnap = TargetSnapClosest;
+-			break;
+-		case SCE_SNAP_TARGET_CENTER:
+-			t->tsnap.targetSnap = TargetSnapCenter;
+-			break;
+-		case SCE_SNAP_TARGET_MEDIAN:
+-			t->tsnap.targetSnap = TargetSnapMedian;
+-			break;
+-		case SCE_SNAP_TARGET_ACTIVE:
+-			t->tsnap.targetSnap = TargetSnapActive;
+-			break;
+-
++	if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
++		t->tsnap.targetSnap = TargetSnapClosest;
+ 	}
++	else {
++		switch (t->tsnap.target) {
++			case SCE_SNAP_TARGET_CLOSEST:
++				t->tsnap.targetSnap = TargetSnapClosest;
++				break;
++			case SCE_SNAP_TARGET_CENTER:
++				t->tsnap.targetSnap = TargetSnapCenter;
++				break;
++			case SCE_SNAP_TARGET_MEDIAN:
++				t->tsnap.targetSnap = TargetSnapMedian;
++				break;
++			case SCE_SNAP_TARGET_ACTIVE:
++				t->tsnap.targetSnap = TargetSnapActive;
++				break;
++	
++		}
++	}
+ 
+ 	switch (t->mode) {
+ 		case TFM_TRANSLATION:
+@@ -585,6 +594,13 @@
+ 				t->tsnap.targetSnap = TargetSnapMedian;
+ 			}
+ 			break;
++
++			// Can't do TARGET_CENTER with rotation, use TARGET_MEDIAN instead
++			if (t->tsnap.target == SCE_SNAP_TARGET_CENTER) {
++				t->tsnap.target = SCE_SNAP_TARGET_MEDIAN;
++				t->tsnap.targetSnap = TargetSnapMedian;
++			}
++			break;
+ 		default:
+ 			t->tsnap.applySnap = NULL;
+ 			break;
+@@ -702,7 +718,24 @@
+ 
+ static void ApplySnapRotation(TransInfo *t, float *value)
+ {
+-	if (t->tsnap.target == SCE_SNAP_TARGET_CLOSEST) {
++	float mat[3][3];
++	float xaxis[3] = {1.0f, 0.0f, 0.0f};
++	float axis[3];
++	float angle;
++	
++	if (t->flag & T_MANIP_SET) {
++		float vec[3];
++		getSnapPoint(t, vec);
++
++		copy_m3_m4(mat, t->manip_rootmat);
++		mul_v3_m3v3(xaxis, mat, xaxis);
++		sub_v3_v3(vec, t->manip_rootmat[3]);
++		angle = angle_v3v3(vec, xaxis);
++		cross_v3_v3v3(axis, vec, xaxis);
++		copy_v3_v3(t->axis, axis);
++		*value = -angle;
++	}
++	else if (t->tsnap.target == SCE_SNAP_TARGET_CLOSEST) {
+ 		*value = t->tsnap.dist;
+ 	}
+ 	else {
+@@ -1055,7 +1088,12 @@
+ 		t->tsnap.snapTarget[2] = 0;
+ 		
+ 		for (td = t->data, i = 0; i < t->total && td->flag & TD_SELECTED; i++, td++) {
+-			add_v3_v3(t->tsnap.snapTarget, td->center);
++			if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
++				add_v3_v3(t->tsnap.snapTarget, t->center);
++			}
++			else {
++				add_v3_v3(t->tsnap.snapTarget, td->center);
++			}
+ 		}
+ 		
+ 		mul_v3_fl(t->tsnap.snapTarget, 1.0 / i);
+@@ -1083,8 +1121,23 @@
+ 			for (td = t->data, i = 0; i < t->total && td->flag & TD_SELECTED; i++, td++) {
+ 				struct BoundBox *bb = BKE_object_boundbox_get(td->ob);
+ 				
++				/* use manipulator location when in set or free mode */
++				if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
++					float loc[3];
++					float dist;
++					
++					copy_v3_v3(loc, t->center);
++					
++					dist = t->tsnap.distance(t, loc, t->tsnap.snapPoint);
++					
++					if (closest == NULL || fabsf(dist) < fabsf(t->tsnap.dist)) {
++						copy_v3_v3(t->tsnap.snapTarget, loc);
++						closest = td;
++						t->tsnap.dist = dist;
++					}
++				}				
+ 				/* use boundbox if possible */
+-				if (bb) {
++				else if (bb) {
+ 					int j;
+ 					
+ 					for (j = 0; j < 8; j++) {
+@@ -1126,7 +1179,12 @@
+ 				float loc[3];
+ 				float dist;
+ 				
+-				copy_v3_v3(loc, td->center);
++				if (t->flag & (T_MANIP_SET | T_MANIP_FREE)) {
++					copy_v3_v3(loc, t->center);
++				}
++				else {
++					copy_v3_v3(loc, td->center);
++				}
+ 				
+ 				if (t->flag & (T_EDIT | T_POSE)) {
+ 					Object *ob = t->obedit ? t->obedit : t->poseobj;
+@@ -1349,7 +1407,7 @@
+ 
+ static bool snapDerivedMesh(short snap_mode, ARegion *ar, Object *ob, DerivedMesh *dm, BMEditMesh *em, float obmat[4][4],
+                             const float ray_start[3], const float ray_normal[3], const float mval[2],
+-                            float r_loc[3], float r_no[3], float *r_dist_px, float *r_depth)
++                            float r_loc[3], float r_no[3], float *r_dist_px, float *r_depth, bool setmanip)
+ {
+ 	bool retval = false;
+ 	int totvert = dm->getNumVerts(dm);
+@@ -1393,7 +1451,7 @@
+ 					float local_scale = len_v3(ray_normal_local);
+ 
+ 					treeData.em_evil = em;
+-					bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6);
++					bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6, !setmanip);
+ 
+ 					hit.index = -1;
+ 					hit.dist = *r_depth * (*r_depth == TRANSFORM_DIST_MAX_RAY ? 1.0f : local_scale);
+@@ -1449,7 +1507,7 @@
+ 								eve = EDBM_vert_at_index(em, index);
+ 								
+ 								if ((BM_elem_flag_test(eve, BM_ELEM_HIDDEN) ||
+-								     BM_elem_flag_test(eve, BM_ELEM_SELECT)))
++								     (BM_elem_flag_test(eve, BM_ELEM_SELECT) && (!setmanip))))
+ 								{
+ 									test = 0;
+ 								}
+@@ -1498,8 +1556,8 @@
+ 								BMEdge *eed = EDBM_edge_at_index(em, index);
+ 
+ 								if ((BM_elem_flag_test(eed, BM_ELEM_HIDDEN) ||
+-								     BM_elem_flag_test(eed->v1, BM_ELEM_SELECT) ||
+-								     BM_elem_flag_test(eed->v2, BM_ELEM_SELECT)))
++								     ((BM_elem_flag_test(eed->v1, BM_ELEM_SELECT) ||
++								     BM_elem_flag_test(eed->v2, BM_ELEM_SELECT)) && !setmanip)))
+ 								{
+ 									test = 0;
+ 								}
+@@ -1646,7 +1704,7 @@
+ static bool snapObject(Scene *scene, short snap_mode, ARegion *ar, Object *ob, float obmat[4][4], bool use_obedit,
+                        Object **r_ob, float r_obmat[4][4],
+                        const float ray_start[3], const float ray_normal[3], const float mval[2],
+-                       float r_loc[3], float r_no[3], float *r_dist_px, float *r_depth)
++                       float r_loc[3], float r_no[3], float *r_dist_px, float *r_depth, bool setmanip)
+ {
+ 	bool retval = false;
+ 	
+@@ -1663,7 +1721,7 @@
+ 			dm = mesh_get_derived_final(scene, ob, CD_MASK_BAREMESH);
+ 		}
+ 		
+-		retval = snapDerivedMesh(snap_mode, ar, ob, dm, em, obmat, ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_depth);
++		retval = snapDerivedMesh(snap_mode, ar, ob, dm, em, obmat, ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_depth, setmanip);
+ 
+ 		dm->release(dm);
+ 	}
+@@ -1694,13 +1752,14 @@
+ {
+ 	Base *base;
+ 	bool retval = false;
++	bool setmanip = v3d->twflag & V3D_SET_MANIPULATOR;
+ 
+ 	if (mode == SNAP_ALL && obedit) {
+ 		Object *ob = obedit;
+ 
+ 		retval |= snapObject(scene, snap_mode, ar, ob, ob->obmat, true,
+ 		                     r_ob, r_obmat,
+-		                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist);
++		                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist, setmanip);
+ 	}
+ 
+ 	/* Need an exception for particle edit because the base is flagged with BA_HAS_RECALC_DATA
+@@ -1713,15 +1772,15 @@
+ 		Object *ob = base->object;
+ 		retval |= snapObject(scene, snap_mode, ar, ob, ob->obmat, false,
+ 		                     r_ob, r_obmat,
+-		                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist);
++		                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist, setmanip);
+ 	}
+ 
+ 	for (base = FIRSTBASE; base != NULL; base = base->next) {
+ 		if ((BASE_VISIBLE_BGMODE(v3d, scene, base)) &&
+-		    (base->flag & (BA_HAS_RECALC_OB | BA_HAS_RECALC_DATA)) == 0 &&
++		    (base->flag & (BA_HAS_RECALC_OB | BA_HAS_RECALC_DATA)) == 0 && 
+ 
+ 		    ((mode == SNAP_NOT_SELECTED && (base->flag & (SELECT | BA_WAS_SEL)) == 0) ||
+-		     (ELEM(mode, SNAP_ALL, SNAP_NOT_OBEDIT) && base != base_act)))
++		     (ELEM(mode, SNAP_ALL, SNAP_NOT_OBEDIT) && base != base_act)) || setmanip)
+ 		{
+ 			Object *ob = base->object;
+ 			
+@@ -1732,7 +1791,7 @@
+ 				for (dupli_ob = lb->first; dupli_ob; dupli_ob = dupli_ob->next) {
+ 					retval |= snapObject(scene, snap_mode, ar, dupli_ob->ob, dupli_ob->mat, false,
+ 					                     r_ob, r_obmat,
+-					                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist);
++					                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist, setmanip);
+ 				}
+ 				
+ 				free_object_duplilist(lb);
+@@ -1740,7 +1799,7 @@
+ 			
+ 			retval |= snapObject(scene, snap_mode, ar, ob, ob->obmat, false,
+ 			                     r_ob, r_obmat,
+-			                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist);
++			                     ray_start, ray_normal, mval, r_loc, r_no, r_dist_px, r_ray_dist, setmanip);
+ 		}
+ 	}
+ 	

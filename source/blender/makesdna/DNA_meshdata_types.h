@@ -300,6 +300,7 @@ enum {
 	FREESTYLE_FACE_MARK = 1,
 };
 
+
 /* mvert->flag */
 enum {
 /*	SELECT              = (1 << 0), */

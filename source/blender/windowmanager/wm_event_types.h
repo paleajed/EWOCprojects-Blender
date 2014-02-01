@@ -386,6 +386,9 @@ enum {
 
 #define GESTURE_MODAL_CIRCLE_SIZE	11 /* circle sel: size brush (for trackpad event) */
 
+#define GESTURE_MODAL_PRESEL		12 /* preselection */
+#define GESTURE_MODAL_UNDO			13 /* undo state needs to be pushed */
+
 
 #endif	/* __WM_EVENT_TYPES_H__ */
 

@@ -1,0 +1,21 @@
+***************
+*** 2217,2225 ****
+  	//unsigned char **cols = userData, *col;
+  	drawDMEdgesSel_userData *data = userData;
+  	unsigned char *col;
+- 
+  	eed = EDBM_edge_at_index(data->em, index);
+- 
+  	if (!BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
+  		if (eed == data->eed_act) {
+  			glColor4ubv(data->actCol);
+--- 2279,2287 ----
+  	//unsigned char **cols = userData, *col;
+  	drawDMEdgesSel_userData *data = userData;
+  	unsigned char *col;
++ 	
+  	eed = EDBM_edge_at_index(data->em, index);
++ 	
+  	if (!BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
+  		if (eed == data->eed_act) {
+  			glColor4ubv(data->actCol);

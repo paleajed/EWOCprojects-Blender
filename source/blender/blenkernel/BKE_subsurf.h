@@ -47,7 +47,7 @@ struct PBVH;
 struct SubsurfModifierData;
 struct CCGEdge;
 struct CCGFace;
-struct CCGSubsurf;
+struct CCGSubSurf;
 struct CCGVert;
 struct EdgeHash;
 struct PBVH;

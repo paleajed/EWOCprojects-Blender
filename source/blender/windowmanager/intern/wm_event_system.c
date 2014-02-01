@@ -81,6 +81,8 @@
 #include "wm_event_types.h"
 #include "wm_draw.h"
 
+#include "view3d_intern.h"  /* own include */
+
 #ifndef NDEBUG
 #  include "RNA_enum_types.h"
 #endif
@@ -1781,6 +1783,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
 	        ;
 #endif
 	wmWindowManager *wm = CTX_wm_manager(C);
+	wmWindow *win = CTX_wm_window(C);
 	wmEventHandler *handler, *nexthandler;
 	int action = WM_HANDLER_CONTINUE;
 	int always_pass;
@@ -1894,6 +1897,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
 									drop->copy(drag, drop);
 									
 									/* free the drags before calling operator */
+									WM_gestures_reset_level(win);
 									BLI_freelistN(event->customdata);
 									event->customdata = NULL;
 									event->custom = 0;
@@ -2092,6 +2096,7 @@ static void wm_event_drag_test(wmWindowManager *wm, wmWindow *win, wmEvent *even
 	if (event->type == MOUSEMOVE)
 		win->screen->do_draw_drag = TRUE;
 	else if (event->type == ESCKEY) {
+		WM_gestures_reset_level(win);
 		BLI_freelistN(&wm->drags);
 		win->screen->do_draw_drag = TRUE;
 	}
@@ -2178,6 +2183,8 @@ void wm_event_do_handlers(bContext *C)
 		
 		while ( (event = win->queue.first) ) {
 			int action = WM_HANDLER_CONTINUE;
+			ScrArea *sa;
+			ARegion *ar;
 
 #ifndef NDEBUG
 			if (G.debug & (G_DEBUG_HANDLERS | G_DEBUG_EVENTS) && !ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
@@ -2187,10 +2194,17 @@ void wm_event_do_handlers(bContext *C)
 #endif
 			
 			CTX_wm_window_set(C, win);
+			CTX_wm_screen_set(C, win->screen);
 			
 			/* we let modal handlers get active area/region, also wm_paintcursor_test needs it */
-			CTX_wm_area_set(C, area_event_inside(C, &event->x));
-			CTX_wm_region_set(C, region_event_inside(C, &event->x));
+			sa = area_event_inside(C, &event->x);
+			CTX_wm_area_set(C, sa);
+			if (sa)
+				wm->act_area = sa;
+			ar = region_event_inside(C, &event->x);
+			CTX_wm_region_set(C, ar);
+			if (ar)
+				wm->act_region = ar;
 			
 			/* MVC demands to not draw in event handlers... but we need to leave it for ogl selecting etc */
 			wm_window_make_drawable(wm, win);
@@ -2211,8 +2225,6 @@ void wm_event_do_handlers(bContext *C)
 			wm_tweakevent_test(C, event, action);
 
 			if ((action & WM_HANDLER_BREAK) == 0) {
-				ScrArea *sa;
-				ARegion *ar;
 				int doit = 0;
 	
 				/* Note: setting subwin active should be done here, after modal handlers have been done */

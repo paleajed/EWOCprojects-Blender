@@ -443,6 +443,7 @@ static void draw_uvs_looptri(BMEditMesh *em, unsigned int *r_loop_index, const i
 }
 #endif
 
+
 /* draws uv's in the image space */
 static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 {
@@ -450,20 +451,36 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 	Mesh *me = obedit->data;
 	BMEditMesh *em = me->edit_btmesh;
 	BMesh *bm = em->bm;
+	BMVert *eve;
+	BMEdge *eed;
 	BMFace *efa, *efa_act;
 #ifndef USE_EDBM_LOOPTRIS
 	BMFace *activef;
 #endif
-	BMLoop *l;
-	BMIter iter, liter;
+	BMLoop *l, *l1, *l2;
+	BMIter iter, liter, liter2;
+	GHashIterator *ghiter;
 	MTexPoly *tf, *activetf = NULL;
-	MLoopUV *luv;
+	MLoopUV *luv, *luv1, *luv2;
 	DerivedMesh *finaldm, *cagedm;
 	unsigned char col1[4], col2[4];
 	float pointsize;
 	int drawfaces, interpedges;
+	int i;
+	bool cont, cond;
 	Image *ima = sima->image;
 
+	GLfloat *vertices;
+	GLubyte *colors;
+	GLint *starting_elems;
+	GLsizei *counts;
+	int numfaces;
+	int numverts = 0;
+	int vpos = 0;
+	int cpos = 0;
+	int fpos = 0;
+	unsigned char sel_col[4], nosel_col[4], prop_col[4], normal_col[4];
+	
 	const int cd_loop_uv_offset  = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
 	const int cd_poly_tex_offset = CustomData_get_offset(&bm->pdata, CD_MTEXPOLY);
 
@@ -621,6 +638,73 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 	}
 #endif
 	
+	if (ts->use_prop_presel) {
+		/* proportional preselected faces */
+		UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
+		
+		glEnable(GL_BLEND);
+		ghiter = BLI_ghashIterator_new(em->prop2d_faces);
+		efa = BLI_ghashIterator_getKey(ghiter);
+		while (efa) {
+			prop_col[3] = (char)BLI_ghash_lookup(em->prop2d_faces, efa);
+			glColor4ubv(prop_col);
+			/* draw face */
+			glBegin(GL_TRIANGLE_FAN);
+			BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+				luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+				glVertex2fv(luv->uv);
+			}
+			glEnd();
+			
+			BLI_ghashIterator_step(ghiter);
+			efa = BLI_ghashIterator_getKey(ghiter);
+		}
+		BLI_ghashIterator_free(ghiter);
+		glDisable(GL_BLEND);
+	}
+			
+	if (ts->use_presel) {
+		/* preselected faces */
+		UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+		UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+		
+		glEnable(GL_BLEND);
+		ghiter = BLI_ghashIterator_new(em->presel_faces);
+		efa = BLI_ghashIterator_getKey(ghiter);
+		while (efa) {
+			if (BM_elem_flag_test(efa, BM_ELEM_TAG)) {
+				glColor4ubv(sel_col);
+				if (ts->uv_flag & UV_SYNC_SELECTION) {
+					if (!BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+						glColor4ubv(nosel_col);
+					}
+				}
+				else {
+					BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+						luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+						if (!(luv->flag & MLOOPUV_VERTSEL)) {
+							glColor4ubv(nosel_col);
+							break;
+						}
+					}
+				}
+				/* draw face */
+				glBegin(GL_TRIANGLE_FAN);
+				BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+					luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+					glVertex2fv(luv->uv);
+				}
+				glEnd();
+				
+			}
+			BLI_ghashIterator_step(ghiter);
+			efa = BLI_ghashIterator_getKey(ghiter);
+		}
+		BLI_ghashIterator_free(ghiter);
+		glDisable(GL_BLEND);
+	}
+		
+		
 	/* 4. draw edges */
 
 	if (sima->flag & SI_SMOOTH_UV) {
@@ -760,6 +844,74 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 			break;
 	}
 
+	
+	if (ts->use_presel) {
+		/* preselected edges */
+		UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+		UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+		
+		ghiter = BLI_ghashIterator_new(em->presel_edges);
+		eed = BLI_ghashIterator_getKey(ghiter);
+		while (eed) {
+			if (ts->uv_flag & UV_SYNC_SELECTION) {
+				cond = BM_elem_flag_test(eed, BM_ELEM_SELECT);
+			}
+			l = BLI_ghash_lookup(em->presel_edges, eed);
+			BM_ITER_ELEM (efa, &iter, eed, BM_FACES_OF_EDGE) {
+				if (BM_elem_flag_test(efa, BM_ELEM_TAG)) {
+					/* draw other loops of edge verts as extra info */
+					BM_ITER_ELEM (l1, &liter, eed->v1, BM_LOOPS_OF_VERT) {
+						if (l != NULL) {
+							if ((l1 == l) && (l1 == l->next)) continue;
+						}
+						BM_ITER_ELEM (l2, &liter2, eed->v2, BM_LOOPS_OF_VERT) {
+							if ((l2 == l1->next) || (l2 == l1->prev)) {
+								luv1 = BM_ELEM_CD_GET_VOID_P(l1, cd_loop_uv_offset);
+								luv2 = BM_ELEM_CD_GET_VOID_P(l2, cd_loop_uv_offset);
+								if (!(ts->uv_flag & UV_SYNC_SELECTION)) {
+									cond = (luv1->flag & MLOOPUV_VERTSEL) && (luv2->flag & MLOOPUV_VERTSEL);
+								}
+								if (cond) {
+									glColor4ubv(sel_col);
+								}
+								else {
+									glColor4ubv(nosel_col);
+								}
+								glBegin(GL_LINES);
+								glVertex2fv(luv1->uv);
+								glVertex2fv(luv2->uv);
+								bglEnd();
+							}
+						}
+					}
+				}
+				break;
+			}
+		
+			if (l != NULL) {
+				/* draw edge */
+				glColor4ubv(sel_col);
+				luv1 = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+				luv2 = BM_ELEM_CD_GET_VOID_P(l->next, cd_loop_uv_offset);
+				if (!(ts->uv_flag & UV_SYNC_SELECTION)) {
+					cond = (luv1->flag & MLOOPUV_VERTSEL) && (luv2->flag & MLOOPUV_VERTSEL);
+				}
+				if (!cond) {
+					glColor4ubv(nosel_col);
+				}
+				glBegin(GL_LINES);
+				glVertex2fv(luv1->uv);
+				glVertex2fv(luv2->uv);
+				glEnd();
+			}
+			
+			BLI_ghashIterator_step(ghiter);
+			eed = BLI_ghashIterator_getKey(ghiter);
+		}
+		BLI_ghashIterator_free(ghiter);
+	}
+	
+	
 	if (sima->flag & SI_SMOOTH_UV) {
 		glDisable(GL_LINE_SMOOTH);
 		glDisable(GL_BLEND);
@@ -861,9 +1013,46 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 			}
 		}
 		bglEnd();
+		
+		if (ts->use_presel) {
+			/* preselected verts */
+			UI_GetThemeColor4ubv(TH_PRESEL_SELECT, sel_col);
+			UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
+			
+			glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE) + 1);
+		
+			glBegin(GL_POINTS);
+			ghiter = BLI_ghashIterator_new(em->presel_verts);
+			eve = BLI_ghashIterator_getKey(ghiter);
+			while (eve) {
+				BM_ITER_ELEM (efa, &iter, eve, BM_FACES_OF_VERT) {
+					if (BM_elem_flag_test(efa, BM_ELEM_TAG)) {
+						BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+							if (l->v != eve) continue;
+							glColor4ubv(sel_col);
+							luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+							if (ts->uv_flag & UV_SYNC_SELECTION) {
+								if (!(BM_elem_flag_test(eve, BM_ELEM_SELECT))) {
+									glColor4ubv(nosel_col);
+								}
+							}
+							else {
+								if (!(luv->flag & MLOOPUV_VERTSEL)) {
+									glColor4ubv(nosel_col);
+								}
+							}
+							glVertex2fv(luv->uv);
+						}		
+					}
+				}
+				BLI_ghashIterator_step(ghiter);
+				eve = BLI_ghashIterator_getKey(ghiter);
+			}
+			BLI_ghashIterator_free(ghiter);
+			glEnd();
+			glPointSize(1.0);
+		}
 	}
-
-	glPointSize(1.0);
 }
 
 void draw_uvedit_main(SpaceImage *sima, ARegion *ar, Scene *scene, Object *obedit, Object *obact)

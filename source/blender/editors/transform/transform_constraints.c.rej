@@ -1,0 +1,31 @@
+--- source/blender/editors/transform/transform_constraints.c	(revision 60799)
++++ source/blender/editors/transform/transform_constraints.c	(working copy)
+@@ -614,15 +614,13 @@
+ void setUserConstraint(TransInfo *t, short orientation, int mode, const char ftext[])
+ {
+ 	char text[40];
++	float mtx[3][3] = MAT3_UNITY;
+ 
+ 	switch (orientation) {
+ 		case V3D_MANIP_GLOBAL:
+-		{
+-			float mtx[3][3] = MAT3_UNITY;
+ 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("global"));
+ 			setConstraint(t, mtx, mode, text);
+ 			break;
+-		}
+ 		case V3D_MANIP_LOCAL:
+ 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("local"));
+ 			setLocalConstraint(t, mode, text);
+@@ -644,6 +642,11 @@
+ 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
+ 			setConstraint(t, t->spacemtx, mode, text);
+ 			break;
++		case V3D_MANIP_FREE:
++			BLI_snprintf(text, sizeof(text), ftext, IFACE_("free"));
++			copy_m3_m4(mtx, t->manip_rootmat);
++			setConstraint(t, mtx, mode, text);
++			break;
+ 		default: /* V3D_MANIP_CUSTOM */
+ 			BLI_snprintf(text, sizeof(text), ftext, t->spacename);
+ 			setConstraint(t, t->spacemtx, mode, text);

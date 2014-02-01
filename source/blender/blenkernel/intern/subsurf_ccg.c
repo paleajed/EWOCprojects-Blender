@@ -57,6 +57,7 @@
 #include "BKE_pbvh.h"
 #include "BKE_ccg.h"
 #include "BKE_cdderivedmesh.h"
+#include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
@@ -1597,6 +1598,60 @@ static void ccgDM_drawVerts(DerivedMesh *dm)
 	glEnd();
 }
 
+static void ccgDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm,
+                           unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	GHashIterator *iter;
+	BMVert *eve;
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGVertIterator *vi;
+	CCGKey key;
+	int length = BLI_ghash_size(em->presel_verts);
+	int *indices = MEM_callocN(length * sizeof(int), "presel vert indices");
+	BMVert **verts = MEM_callocN(length * sizeof(BMVert*), "presel verts");
+	int pos = 0;
+	
+	CCG_key_top_level(&key, ccgdm->ss);
+	
+	iter = BLI_ghashIterator_new(em->presel_verts);
+	eve = BLI_ghashIterator_getKey(iter);
+	while (eve) {
+		indices[pos] = eve->head.index;
+		verts[pos] = eve;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		eve = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	glBegin(GL_POINTS);
+	for (vi = ccgSubSurf_getVertIterator(ccgdm->ss); !ccgVertIterator_isStopped(vi); ccgVertIterator_next(vi)) {
+		CCGVert *v = ccgVertIterator_getCurrent(vi);
+		CCGElem *vd = ccgSubSurf_getVertData(ccgdm->ss, v);
+		const int index = ccgDM_getVertMapIndex(ccgdm->ss, v);
+		int i;
+		
+		for (i = 0; i < length; i++) {
+			if (indices[i] == index) {
+				if (BM_elem_flag_test(verts[i], BM_ELEM_SELECT)) {
+					glColor3ubv(sel_col);
+				}
+				else {
+					glColor3ubv(nosel_col);
+				}
+				glVertex3fv(CCG_elem_co(&key, vd));
+				break;
+			}
+		}
+	}
+	glEnd();
+	
+	ccgVertIterator_free(vi);
+	MEM_freeN(indices);
+	MEM_freeN(verts);
+}
+
 static void ccgdm_pbvh_update(CCGDerivedMesh *ccgdm)
 {
 	if (ccgdm->pbvh && ccgDM_use_grid_pbvh(ccgdm)) {
@@ -2480,6 +2535,235 @@ static void ccgDM_drawMappedFaces(DerivedMesh *dm,
 	}
 }
 
+static void ccgDM_drawPreselFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	GHashIterator *iter;
+	BMFace *efa;
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGSubSurf *ss = ccgdm->ss;
+	CCGKey key;
+	int gridSize = ccgSubSurf_getGridSize(ss);
+	int gridFaces = gridSize - 1;
+	int i, totface;
+	int length = BLI_ghash_size(em->presel_faces);
+	int *indices = MEM_callocN(length * sizeof(int), "presel face indices");
+	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "presel faces");
+	int pos = 0;
+	
+	iter = BLI_ghashIterator_new(em->presel_faces);
+	efa = BLI_ghashIterator_getKey(iter);
+	while (efa) {
+		indices[pos] = efa->head.index;
+		faces[pos] = efa;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		efa = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	
+	glEnable(GL_BLEND);
+	
+	totface = ccgSubSurf_getNumFaces(ss);
+	glDisable(GL_DEPTH_TEST);
+	for (i = 0; i < totface; i++) {
+		CCGFace *f = ccgdm->faceMap[i].face;
+		int S, x, y, numVerts = ccgSubSurf_getFaceNumVerts(f);
+		const int index = ccgDM_getFaceMapIndex(ss, f);
+		int j;
+
+		efa = NULL;
+		for (j = 0; j < length; j++) {
+			if (indices[j] == index) {
+				efa = faces[j];
+				break;
+			}
+		}
+			
+		if (efa) {
+			if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+				glColor4ubv(sel_col);
+			}
+			else {
+				glColor4ubv(nosel_col);
+			}
+		}
+		else continue;
+		
+		CCG_key_top_level(&key, ss);
+		
+		for (S = 0; S < numVerts; S++) {
+			CCGElem *faceGridData = ccgSubSurf_getFaceGridDataArray(ss, f, S);
+			for (y = 0; y < gridFaces; y++) {
+				CCGElem *a, *b;
+				glBegin(GL_QUAD_STRIP);
+				for (x = 0; x < gridFaces; x++) {
+					a = CCG_grid_elem(&key, faceGridData, x, y + 0);
+					b = CCG_grid_elem(&key, faceGridData, x, y + 1);
+	
+					glVertex3fv(CCG_elem_co(&key, a));
+					glVertex3fv(CCG_elem_co(&key, b));
+				}
+				
+				a = CCG_grid_elem(&key, faceGridData, x, y + 0);
+				b = CCG_grid_elem(&key, faceGridData, x, y + 1);
+	
+				glVertex3fv(CCG_elem_co(&key, a));
+				glVertex3fv(CCG_elem_co(&key, b));
+	
+				glEnd();
+			}
+		}
+	}
+	glEnable(GL_DEPTH_TEST);	
+	glDisable(GL_BLEND);
+	
+	MEM_freeN(indices);
+	MEM_freeN(faces);
+}
+
+static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char prop_col[4], bool occluded, bool selected)
+{
+	GHashIterator *iter;
+	BMFace *efa;
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGSubSurf *ss = ccgdm->ss;
+	CCGKey key;
+	int gridSize = ccgSubSurf_getGridSize(ss);
+	int gridFaces = gridSize - 1;
+	int i, totface;
+	int length = BLI_ghash_size(em->prop3d_faces);
+	int *indices = MEM_callocN(length * sizeof(int), "prop presel face indices");
+	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "prop presel faces");
+	int pos = 0;
+	float alphafac = (float)prop_col[3] / 255.0f;
+	
+	iter = BLI_ghashIterator_new(em->prop3d_faces);
+	efa = BLI_ghashIterator_getKey(iter);
+	while (efa) {
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
+			indices[pos] = efa->head.index;
+			faces[pos] = efa;
+			pos++;
+		}
+	
+		BLI_ghashIterator_step(iter);
+		efa = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	
+	glEnable(GL_BLEND);
+	
+	totface = ccgSubSurf_getNumFaces(ss);
+	if (!occluded)
+		glDisable(GL_DEPTH_TEST);
+	for (i = 0; i < totface; i++) {
+		CCGFace *f = ccgdm->faceMap[i].face;
+		int S, x, y, numVerts = ccgSubSurf_getFaceNumVerts(f);
+		const int index = ccgDM_getFaceMapIndex(ss, f);
+		int j;
+
+		efa = NULL;
+		for (j = 0; j < pos; j++) {
+			if (indices[j] == index) {
+				efa = faces[j];
+				break;
+			}
+		}
+			
+		if (efa) {
+			prop_col[3] = (unsigned char)BLI_ghash_lookup(em->prop3d_faces, efa) * alphafac;
+			glColor4ubv(prop_col);
+		}
+		else continue;
+		
+		CCG_key_top_level(&key, ss);
+		
+		for (S = 0; S < numVerts; S++) {
+			CCGElem *faceGridData = ccgSubSurf_getFaceGridDataArray(ss, f, S);
+			for (y = 0; y < gridFaces; y++) {
+				CCGElem *a, *b;
+				glBegin(GL_QUAD_STRIP);
+				for (x = 0; x < gridFaces; x++) {
+					a = CCG_grid_elem(&key, faceGridData, x, y + 0);
+					b = CCG_grid_elem(&key, faceGridData, x, y + 1);
+	
+					glVertex3fv(CCG_elem_co(&key, a));
+					glVertex3fv(CCG_elem_co(&key, b));
+				}
+				
+				a = CCG_grid_elem(&key, faceGridData, x, y + 0);
+				b = CCG_grid_elem(&key, faceGridData, x, y + 1);
+	
+				glVertex3fv(CCG_elem_co(&key, a));
+				glVertex3fv(CCG_elem_co(&key, b));
+	
+				glEnd();
+			}
+		}
+	}
+	glEnable(GL_DEPTH_TEST);	
+	glDisable(GL_BLEND);
+	
+	MEM_freeN(indices);
+	MEM_freeN(faces);
+}
+
+
+static void ccgDM_drawPreselFaceNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGSubSurf *ss = ccgdm->ss;
+	CCGKey key;
+	int totface = ccgSubSurf_getNumFaces(ss);
+	int i;
+	
+	CCG_key_top_level(&key, ss);
+	
+	for (i = 0; i < totface; i++) {
+		CCGFace *f = ccgdm->faceMap[i].face;
+		const int index = ccgDM_getFaceMapIndex(ss, f);
+		
+		if (index == bmindex) {
+			CCGElem *vd = ccgSubSurf_getFaceGridData(ss, f, 0, 0, 0);
+			
+			glColor3ubv(normal_col);
+			glBegin(GL_LINES);
+			func(userData, bmindex, CCG_elem_co(&key, vd), CCG_elem_no(&key, vd));
+			glEnd();
+		}
+	}
+}
+
+static void ccgDM_drawPreselVertNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGVertIterator *vi;
+	CCGKey key;
+	
+	CCG_key_top_level(&key, ccgdm->ss);
+	
+	for (vi = ccgSubSurf_getVertIterator(ccgdm->ss); !ccgVertIterator_isStopped(vi); ccgVertIterator_next(vi)) {
+		CCGVert *v = ccgVertIterator_getCurrent(vi);
+		const int index = ccgDM_getVertMapIndex(ccgdm->ss, v);
+		
+		if (index == bmindex) {
+			CCGElem *vd = ccgSubSurf_getVertData(ccgdm->ss, v);
+			
+			glColor3ubv(normal_col);
+			glBegin(GL_LINES);
+			func(userData, bmindex, CCG_elem_co(&key, vd), CCG_elem_no(&key, vd));
+			glEnd();
+		}
+	}
+}
+
 static void ccgDM_drawMappedEdges(DerivedMesh *dm,
                                   DMSetDrawOptions setDrawOptions,
                                   void *userData)
@@ -2552,6 +2836,126 @@ static void ccgDM_drawMappedEdgesInterp(DerivedMesh *dm,
 	}
 
 	ccgEdgeIterator_free(ei);
+}
+
+static void ccgDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm,
+                                  unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	GHashIterator *iter;
+	BMEdge *eed;
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGSubSurf *ss = ccgdm->ss;
+	CCGEdgeIterator *ei;
+	CCGKey key;
+	int edgeSize = ccgSubSurf_getEdgeSize(ss);
+	int length = BLI_ghash_size(em->presel_edges);
+	int *indices = MEM_callocN(length * sizeof(int), "presel edge indices");
+	BMEdge **edges = MEM_callocN(length * sizeof(BMEdge*), "presel edges");
+	int pos = 0;
+	
+	iter = BLI_ghashIterator_new(em->presel_edges);
+	eed = BLI_ghashIterator_getKey(iter);
+	while (eed) {
+		indices[pos] = eed->head.index;
+		edges[pos] = eed;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		eed = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	CCG_key_top_level(&key, ss);
+	
+	for (ei = ccgSubSurf_getEdgeIterator(ss); !ccgEdgeIterator_isStopped(ei); ccgEdgeIterator_next(ei)) {
+		CCGEdge *e = ccgEdgeIterator_getCurrent(ei);
+		CCGElem *edgeData = ccgSubSurf_getEdgeDataArray(ss, e);
+		int index = ccgDM_getEdgeMapIndex(ss, e);
+		int i;
+
+		for (i = 0; i < length; i++) {
+			if (indices[i] == index) {
+				glBegin(GL_LINE_STRIP);
+				
+				if (BM_elem_flag_test(edges[i], BM_ELEM_SELECT)) {
+					glColor3ubv(sel_col);
+				}
+				else {
+					glColor3ubv(nosel_col);
+				}
+				for (i = 0; i < edgeSize - 1; i++) {
+					glVertex3fv(CCG_elem_offset_co(&key, edgeData, i));
+					glVertex3fv(CCG_elem_offset_co(&key, edgeData, i + 1));
+				}
+				glEnd();
+				break;
+			}
+		}
+	}
+
+	ccgEdgeIterator_free(ei);
+	MEM_freeN(indices);
+	MEM_freeN(edges);
+}
+
+static void ccgDM_drawPreselEdgesInterp(BMVert *eve, BMEditMesh *em, DerivedMesh *dm,
+                                        unsigned char conn_col[4])
+{
+	GHashIterator *iter;
+	BMEdge *eed;
+	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
+	CCGSubSurf *ss = ccgdm->ss;
+	CCGKey key;
+	CCGEdgeIterator *ei;
+	int edgeSize = ccgSubSurf_getEdgeSize(ss);
+	int length = BLI_ghash_size(em->presel_edges);
+	int *indices = MEM_callocN(length * sizeof(int), "presel edge indices");
+	BMEdge **edges = MEM_callocN(length * sizeof(BMEdge*), "presel edges");
+	int pos = 0;
+	
+	iter = BLI_ghashIterator_new(em->presel_edges);
+	eed = BLI_ghashIterator_getKey(iter);
+	while (eed) {
+		indices[pos] = eed->head.index;
+		edges[pos] = eed;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		eed = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+
+	CCG_key_top_level(&key, ss);
+
+	glEnable(GL_BLEND);
+	for (ei = ccgSubSurf_getEdgeIterator(ss); !ccgEdgeIterator_isStopped(ei); ccgEdgeIterator_next(ei)) {
+		CCGEdge *e = ccgEdgeIterator_getCurrent(ei);
+		CCGElem *edgeData = ccgSubSurf_getEdgeDataArray(ss, e);
+		int index = ccgDM_getEdgeMapIndex(ss, e);
+		int i, j;
+
+		for (i = 0; i < length; i++) {
+			if (indices[i] == index) {
+				if ((edges[i]->v1 == eve) || (edges[i]->v2 == eve)) {
+					conn_col[3] = 125;
+					glColor4ubv(conn_col);
+					glBegin(GL_LINE_STRIP);
+					if (index != -1) {
+						for (j = 0; j < edgeSize; j++) {
+							glVertex3fv(CCG_elem_offset_co(&key, edgeData, j));
+						}
+					}
+					glEnd();
+				}
+			}
+		}
+	}
+	glDisable(GL_BLEND);
+	
+	ccgEdgeIterator_free(ei);
+	MEM_freeN(indices);
+	MEM_freeN(edges);
 }
 
 static void ccgDM_foreachMappedFaceCenter(
@@ -3261,6 +3665,14 @@ static CCGDerivedMesh *getCCGDerivedMesh(CCGSubSurf *ss,
 
 	ccgdm->dm.drawMappedEdgesInterp = ccgDM_drawMappedEdgesInterp;
 	ccgdm->dm.drawMappedEdges = ccgDM_drawMappedEdges;
+	
+	ccgdm->dm.drawPreselVerts = ccgDM_drawPreselVerts;
+	ccgdm->dm.drawPreselEdges = ccgDM_drawPreselEdges;
+	ccgdm->dm.drawPreselEdgesInterp = ccgDM_drawPreselEdgesInterp;
+	ccgdm->dm.drawPreselFaces = ccgDM_drawPreselFaces;
+	ccgdm->dm.drawPreselPropFaces = ccgDM_drawPreselPropFaces;
+	ccgdm->dm.drawPreselFaceNormal = ccgDM_drawPreselFaceNormal;
+	ccgdm->dm.drawPreselVertNormal = ccgDM_drawPreselVertNormal;
 	
 	ccgdm->dm.release = ccgDM_release;
 	

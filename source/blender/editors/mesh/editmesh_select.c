@@ -69,6 +69,8 @@
 
 #include "UI_resources.h"
 
+#include "transform.h"
+
 #include "mesh_intern.h"  /* own include */
 
 /* use bmesh operator flags for a few operators */
@@ -577,7 +579,6 @@ static void findnearestface__doClosest(void *userData, BMFace *efa, const float 
 
 BMFace *EDBM_face_find_nearest(ViewContext *vc, float *r_dist)
 {
-
 	if (vc->v3d->drawtype > OB_WIRE && (vc->v3d->flag & V3D_ZBUF_SELECT)) {
 		unsigned int index;
 		BMFace *efa;
@@ -1007,7 +1008,8 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 
 /* ****************  LOOP SELECTS *************** */
 
-static void walker_select(BMEditMesh *em, int walkercode, void *start, const bool select)
+static void walker_select(BMEditMesh *em, int walkercode, void *start, 
+                          const bool select, const bool presel, const bool vert)
 {
 	BMesh *bm = em->bm;
 	BMElem *ele;
@@ -1019,10 +1021,31 @@ static void walker_select(BMEditMesh *em, int walkercode, void *start, const boo
 	         BMW_NIL_LAY);
 
 	for (ele = BMW_begin(&walker, start); ele; ele = BMW_step(&walker)) {
-		if (!select) {
-			BM_select_history_remove(bm, ele);
+		if (presel) {
+			switch (ele->head.htype) {
+				case BM_VERT:
+					BLI_ghash_insert(em->presel_verts, ele, NULL);
+					break;
+				case BM_EDGE:
+					if (vert) {
+						BLI_ghash_insert(em->presel_verts, ((BMEdge *)ele)->v1, NULL);
+						BLI_ghash_insert(em->presel_verts, ((BMEdge *)ele)->v2, NULL);
+					}
+					else {
+						BLI_ghash_insert(em->presel_edges, ele, NULL);
+					}
+					break;
+				case BM_FACE:
+					BLI_ghash_insert(em->presel_faces, ele, NULL);
+					break;
+			}
 		}
-		BM_elem_select_set(bm, ele, select);
+		else {
+			if (!select) {
+				BM_select_history_remove(bm, ele);
+			}
+			BM_elem_select_set(bm, ele, select);
+		}
 	}
 	BMW_end(&walker);
 }
@@ -1058,14 +1081,14 @@ static int edbm_loop_multiselect_exec(bContext *C, wmOperator *op)
 	if (is_ring) {
 		for (edindex = 0; edindex < totedgesel; edindex += 1) {
 			eed = edarray[edindex];
-			walker_select(em, BMW_EDGERING, eed, true);
+			walker_select(em, BMW_EDGERING, eed, true, false, false);
 		}
 		EDBM_selectmode_flush(em);
 	}
 	else {
 		for (edindex = 0; edindex < totedgesel; edindex += 1) {
 			eed = edarray[edindex];
-			walker_select(em, BMW_LOOP, eed, true);
+			walker_select(em, BMW_LOOP, eed, true, false, false);
 		}
 		EDBM_selectmode_flush(em);
 	}
@@ -1101,11 +1124,12 @@ void MESH_OT_loop_multi_select(wmOperatorType *ot)
 
 /* ***************** loop select (non modal) ************** */
 
-static void mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool ring)
+static void mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool ring, bool presel)
 {
 	ViewContext vc;
 	BMEditMesh *em;
 	BMEdge *eed;
+	bool vert = false;
 	bool select = true;
 	float dist = 50.0f;
 	float mvalf[2];
@@ -1120,7 +1144,7 @@ static void mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool de
 
 	eed = EDBM_edge_find_nearest(&vc, &dist);
 	if (eed) {
-		if (extend == false && deselect == false && toggle == false) {
+		if (extend == false && deselect == false && toggle == false && presel == false) {
 			EDBM_flag_disable_all(em, BM_ELEM_SELECT);
 		}
 	
@@ -1138,26 +1162,30 @@ static void mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool de
 		}
 
 		if (em->selectmode & SCE_SELECT_FACE) {
-			walker_select(em, BMW_FACELOOP, eed, select);
+			BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			walker_select(em, BMW_FACELOOP, eed, select, presel, vert);
 		}
 		else if (em->selectmode & SCE_SELECT_EDGE) {
+			BLI_ghash_clear(em->presel_edges, NULL, NULL);
 			if (ring)
-				walker_select(em, BMW_EDGERING, eed, select);
+				walker_select(em, BMW_EDGERING, eed, select, presel, vert);
 			else
-				walker_select(em, BMW_LOOP, eed, select);
+				walker_select(em, BMW_LOOP, eed, select, presel, vert);
 		}
 		else if (em->selectmode & SCE_SELECT_VERTEX) {
+			vert = true;
+			BLI_ghash_clear(em->presel_verts, NULL, NULL);
 			if (ring)
-				walker_select(em, BMW_EDGERING, eed, select);
+				walker_select(em, BMW_EDGERING, eed, select, presel, vert);
 
 			else
-				walker_select(em, BMW_LOOP, eed, select);
+				walker_select(em, BMW_LOOP, eed, select, presel, vert);
 		}
 
 		EDBM_selectmode_flush(em);
 
 		/* sets as active, useful for other tools */
-		if (select) {
+		if (select && !presel) {
 			if (em->selectmode & SCE_SELECT_VERTEX) {
 				/* Find nearest vert from mouse
 				 * (initialize to large values incase only one vertex can be projected) */
@@ -1216,12 +1244,19 @@ static void mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool de
 			}
 		}
 
-		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit);
+		if (presel) {
+			WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+		}
+		else {
+			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit);
+		}
 	}
 }
 
 static int edbm_select_loop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+	Scene *scene = CTX_data_scene(C);
+	if (RNA_boolean_get(op->ptr, "presel") && !scene->toolsettings->use_presel) return OPERATOR_CANCELLED;
 	
 	view3d_operator_needs_opengl(C);
 	
@@ -1229,7 +1264,8 @@ static int edbm_select_loop_invoke(bContext *C, wmOperator *op, const wmEvent *e
 	                RNA_boolean_get(op->ptr, "extend"),
 	                RNA_boolean_get(op->ptr, "deselect"),
 	                RNA_boolean_get(op->ptr, "toggle"),
-	                RNA_boolean_get(op->ptr, "ring"));
+	                RNA_boolean_get(op->ptr, "ring"),
+	                RNA_boolean_get(op->ptr, "presel"));
 	
 	/* cannot do tweaks for as long this keymap is after transform map */
 	return OPERATOR_FINISHED;
@@ -1254,6 +1290,26 @@ void MESH_OT_loop_select(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
 	RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
 	RNA_def_boolean(ot->srna, "ring", 0, "Select Ring", "Select ring");
+	RNA_def_boolean(ot->srna, "presel", 0, "Preselection", "Preselect");
+}
+
+void MESH_OT_loop_presel(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Loop Preselect";
+	ot->idname = "MESH_OT_loop_presel";
+	ot->description = "Preselect a loop of connected edges";
+	
+	/* api callbacks */
+	ot->invoke = edbm_select_loop_invoke;
+	ot->poll = ED_operator_editmesh_region_view3d;
+	
+	/* properties */
+	RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "Extend the selection");
+	RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
+	RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
+	RNA_def_boolean(ot->srna, "ring", 0, "Select Ring", "Select ring");
+	RNA_def_boolean(ot->srna, "presel", 0, "Preselection", "Preselect");
 }
 
 void MESH_OT_edgering_select(wmOperatorType *ot)
@@ -1274,6 +1330,27 @@ void MESH_OT_edgering_select(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
 	RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
 	RNA_def_boolean(ot->srna, "ring", 1, "Select Ring", "Select ring");
+	RNA_def_boolean(ot->srna, "presel", 0, "Preselection", "Preselect");
+}
+
+void MESH_OT_edgering_presel(wmOperatorType *ot)
+{
+	/* description */
+	ot->name = "Edge Ring Preselect";
+	ot->idname = "MESH_OT_edgering_presel";
+	ot->description = "Preselect an edge ring";
+	
+	/* callbacks */
+	ot->invoke = edbm_select_loop_invoke;
+	ot->poll = ED_operator_editmesh_region_view3d;
+	
+	/* flags */
+
+	RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend the selection");
+	RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Remove from the selection");
+	RNA_def_boolean(ot->srna, "toggle", 0, "Toggle Select", "Toggle the selection");
+	RNA_def_boolean(ot->srna, "ring", 1, "Select Ring", "Select ring");
+	RNA_def_boolean(ot->srna, "presel", 0, "Preselection", "Preselect");
 }
 
 /* ******************** (de)select all operator **************** */
@@ -1471,6 +1548,64 @@ bool EDBM_select_pick(bContext *C, const int mval[2], bool extend, bool deselect
 	return false;
 }
 
+bool EDBM_presel_pick(bContext *C, const int mval[2])
+{
+	ViewContext vc;
+	BMVert *eve = NULL;
+	BMEdge *eed = NULL;
+	BMFace *efa = NULL;
+	
+	/* setup view context */
+	em_setup_viewcontext(C, &vc);
+	vc.mval[0] = mval[0];
+	vc.mval[1] = mval[1];
+	vc.em = BKE_editmesh_from_object(vc.obedit);
+
+	if (unified_findnearest(&vc, &eve, &eed, &efa)) {
+		if (efa) {
+			BLI_ghash_clear(vc.em->presel_verts, NULL, NULL);
+			BLI_ghash_clear(vc.em->presel_edges, NULL, NULL);
+			if (!BLI_ghash_haskey(vc.em->presel_faces, efa)) {
+				BLI_ghash_clear(vc.em->presel_faces, NULL, NULL);
+				BLI_ghash_insert(vc.em->presel_faces, efa, NULL);
+			}
+			else {
+				return false;
+			}
+		}
+		else if (eed) {
+			BLI_ghash_clear(vc.em->presel_verts, NULL, NULL);
+			BLI_ghash_clear(vc.em->presel_faces, NULL, NULL);
+			if (!BLI_ghash_haskey(vc.em->presel_edges, eed)) {
+				BLI_ghash_clear(vc.em->presel_edges, NULL, NULL);
+				BLI_ghash_insert(vc.em->presel_edges, eed, NULL);
+			}
+			else {
+				return false;
+			}
+		}
+		else if (eve) {
+			BLI_ghash_clear(vc.em->presel_edges, NULL, NULL);
+			BLI_ghash_clear(vc.em->presel_faces, NULL, NULL);
+			if (!BLI_ghash_haskey(vc.em->presel_verts, eve)) {
+				BLI_ghash_clear(vc.em->presel_verts, NULL, NULL);
+				BLI_ghash_insert(vc.em->presel_verts, eve, NULL);
+			}
+			else {
+				return false;
+			}
+		}
+		WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+		return true;
+	}
+	BLI_ghash_clear(vc.em->presel_verts, NULL, NULL);
+	BLI_ghash_clear(vc.em->presel_edges, NULL, NULL);
+	BLI_ghash_clear(vc.em->presel_faces, NULL, NULL);
+	WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+	return false;
+}
+
+	
 static void edbm_strip_selections(BMEditMesh *em)
 {
 	BMEditSelection *ese, *nextese;
@@ -3217,3 +3352,194 @@ void MESH_OT_loop_to_region(wmOperatorType *ot)
 
 
 /************************ Select Path Operator *************************/
+
+
+
+
+
+
+/* -------------------- preselection --------------------------------------------- */
+
+void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+{
+	/* sets alpha for proportional preselection */
+	/* uses the transform code: to avoid much code duplication */
+	
+	/* todo mirror */
+	ToolSettings *ts = screen->scene->toolsettings;
+	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
+	GHash *temp_elems = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "temp_elems");
+	GHash *temp_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "temp_faces");
+	GHashIterator *ghiter;
+	BMEditMesh *em;
+	BMIter iter;
+	BMFace *efa;
+	BMLoop *loop;
+	unsigned short median;
+	unsigned char alpha;
+	int elem_count = 0;
+	int pos = 0;
+	int i;
+	ARegion *ar;
+	bContext *C = CTX_create();
+	
+	if (!screen->scene->obedit) return;
+	if (!(screen->scene->obedit->type == OB_MESH)) return;
+	em = BKE_editmesh_from_object(screen->scene->obedit);
+	if (!screen->scene->toolsettings->use_prop_presel) {
+		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	if (!force && (sa != wm->act_area)) return;
+	
+	for (ar = sa->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_WINDOW) {
+			t->ar = ar;
+			break;
+		}
+	}
+	
+	CTX_wm_screen_set(C, screen);
+	CTX_wm_area_set(C, sa);
+	CTX_data_scene_set(C, screen->scene);
+		
+	if (ts->proportional == PROP_EDIT_OFF) {
+		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	
+	t->scene = screen->scene;
+	t->spacetype = sa->spacetype;
+	t->obedit = screen->scene->obedit;
+	
+	if (t->spacetype == SPACE_IMAGE) {
+		if (!(ts->uv_flag & UV_SYNC_SELECTION)) {
+			if (em->bm->totfacesel == 0) {
+				BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+				BLI_ghash_free(temp_elems, NULL, NULL);
+				BLI_ghash_free(temp_faces, NULL, NULL);
+				CTX_free(C);
+				MEM_freeN(t);
+				return;
+			}
+		}
+	}
+	
+	switch (ts->proportional) {
+		case PROP_EDIT_ON:
+			t->flag |= T_PROP_EDIT;
+			break;
+		case PROP_EDIT_CONNECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_CONNECTED;
+			break;
+		case PROP_EDIT_PROJECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_PROJECTED;
+			break;
+	}
+	t->prop_mode = ts->prop_mode;
+	t->prop_size = ts->proportional_size;
+	
+	createTransData(C, t);
+	calculatePropRatio(t);
+	/* Make vert list with alpha based on proportional factor */
+	for(i = 0; i < t->total; i++) {
+		if (t->data[i].factor > 0) {
+			elem_count++;
+		}
+	}
+	for(i = 0; i < t->total; i++) {
+		alpha = (char)(t->data[i].factor * 125.0);
+		if (alpha > 0) {
+			alpha *= 0.8;
+			BLI_ghash_insert(temp_elems, t->data[i].elem, alpha);
+			pos++;
+		}
+	}
+	
+	/* Make face list with alpha interpolated from face-elems */
+	if (t->spacetype == SPACE_VIEW3D) {
+		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+		for(i = 0; i < t->total; i++) {
+			BM_ITER_ELEM (efa, &iter, (BMVert *)t->data[i].elem, BM_FACES_OF_VERT) {
+				if (!BLI_ghash_haskey(temp_faces, efa)) {
+					BLI_ghash_insert(temp_faces, efa, NULL);
+				}
+			}
+		}
+	}
+	else if (t->spacetype == SPACE_IMAGE) {
+		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+		for(i = 0; i < t->total; i++) {
+			efa = ((BMLoop *)t->data[i].elem)->f;
+			if (!BLI_ghash_haskey(temp_faces, efa)) {
+				BLI_ghash_insert(temp_faces, efa, NULL);
+			}
+		}
+	}
+	
+	pos = 0;
+	ghiter = BLI_ghashIterator_new(temp_faces);
+	efa = BLI_ghashIterator_getKey(ghiter);
+	while (efa) {
+		median = 0;
+		loop = efa->l_first;
+		for (i = 0; i < efa->len; i++) {
+			if (t->spacetype == SPACE_VIEW3D) {
+				if (BLI_ghash_haskey(temp_elems, loop->v)) {
+					alpha = (char)BLI_ghash_lookup(temp_elems, loop->v);
+					if (alpha) median += alpha;
+				}
+				else if (ts->prop_mode == PROP_CONST) {
+					median = 0;
+					break;
+				}
+			}
+			else if (t->spacetype == SPACE_IMAGE) {
+				if (BLI_ghash_haskey(temp_elems, loop)) {
+					alpha = (char)BLI_ghash_lookup(temp_elems, loop);
+					if (alpha) median += alpha;
+				}
+				else if (ts->prop_mode == PROP_CONST) {
+					median = 0;
+					break;
+				}
+			}
+			loop = loop->next;
+		}
+		median /= efa->len;
+		if (median > 0) {
+			if (t->spacetype == SPACE_VIEW3D) {
+				BLI_ghash_insert(em->prop3d_faces, efa->head.index, (unsigned char)median);
+			}
+			else if (t->spacetype == SPACE_IMAGE) {
+				BLI_ghash_insert(em->prop2d_faces, efa, (unsigned char)median);
+			}
+			pos++;
+		}
+		BLI_ghashIterator_step(ghiter);
+		efa = BLI_ghashIterator_getKey(ghiter);
+	}
+	BLI_ghashIterator_free(ghiter);
+	
+	BLI_ghash_free(temp_elems, NULL, NULL);
+	BLI_ghash_free(temp_faces, NULL, NULL);
+	CTX_free(C);
+	if (t->data)
+		MEM_freeN(t->data);
+	if (t->spacetype == SPACE_IMAGE) {
+		if (t->data2d)
+			MEM_freeN(t->data2d);
+	}
+	MEM_freeN(t);
+	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
+}

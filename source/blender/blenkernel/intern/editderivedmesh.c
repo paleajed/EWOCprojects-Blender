@@ -231,6 +231,42 @@ static void emDM_foreachMappedVert(
 		}
 	}
 }
+
+static void emDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	GHashIterator *iter;
+	BMVert *eve;
+	bool vset = false;
+	const float (*vertexCos)[3] = bmdm->vertexCos;
+
+	if (bmdm->vertexCos) {
+		vset = true;
+	}
+	
+	glBegin(GL_POINTS);
+	iter = BLI_ghashIterator_new(em->presel_verts);
+	eve = BLI_ghashIterator_getKey(iter);
+	while (eve) {
+		if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
+			glColor3ubv(sel_col);
+		}
+		else {
+			glColor3ubv(nosel_col);
+		}
+		if (vset) {
+			glVertex3fv(vertexCos[BM_elem_index_get(eve)]);
+		}
+		else {
+			glVertex3fv(eve->co);
+		}
+		BLI_ghashIterator_step(iter);
+		eve = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+	glEnd();	
+}
+
 static void emDM_foreachMappedEdge(DerivedMesh *dm,
                                    void (*func)(void *userData, int index, const float v0co[3], const float v1co[3]),
                                    void *userData)
@@ -297,6 +333,75 @@ static void emDM_drawEdges(DerivedMesh *dm,
                            int UNUSED(drawAllEdges))
 {
 	emDM_drawMappedEdges(dm, NULL, NULL);
+}
+
+static void emDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	GHashIterator *iter;
+	BMEdge *eed;
+	bool vset = false;
+	const float (*vertexCos)[3] = bmdm->vertexCos;
+
+	if (bmdm->vertexCos) {
+		vset = true;
+	}
+	
+	glBegin(GL_LINES);
+	iter = BLI_ghashIterator_new(em->presel_edges);
+	eed = BLI_ghashIterator_getKey(iter);
+	while (eed) {
+		if (BM_elem_flag_test(eed, BM_ELEM_SELECT)) {
+			glColor3ubv(sel_col);
+		}
+		else {
+			glColor3ubv(nosel_col);
+		}
+		
+		if (vset) {
+			glVertex3fv(vertexCos[BM_elem_index_get(eed->v1)]);
+			glVertex3fv(vertexCos[BM_elem_index_get(eed->v2)]);
+		}
+		else {
+			glVertex3fv(eed->v1->co);
+			glVertex3fv(eed->v2->co);
+		}
+		
+		BLI_ghashIterator_step(iter);
+		eed = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+	glEnd();	
+}
+
+static void emDM_drawPreselEdgesInterp(BMVert *eve, BMEditMesh *em, DerivedMesh *dm, 
+                                       unsigned char conn_col[4])
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	BMIter eiter;
+	BMEdge *eed;
+	bool vset = false;
+	const float (*vertexCos)[3] = bmdm->vertexCos;
+
+	if (bmdm->vertexCos) {
+		vset = true;
+	}
+	
+	glEnable(GL_BLEND);
+	conn_col[3] = 125;
+	glColor4ubv(conn_col);
+	glBegin(GL_LINES);
+	BM_ITER_ELEM (eed, &eiter, eve, BM_EDGES_OF_VERT) {		if (vset) {
+			glVertex3fv(vertexCos[BM_elem_index_get(eed->v1)]);
+			glVertex3fv(vertexCos[BM_elem_index_get(eed->v2)]);
+		}
+		else {
+			glVertex3fv(eed->v1->co);
+			glVertex3fv(eed->v2->co);
+		}
+	}
+	glEnd();	
+	glDisable(GL_BLEND);
 }
 
 static void emDM_drawMappedEdgesInterp(DerivedMesh *dm,
@@ -649,6 +754,167 @@ static void emDM_drawMappedFaces(DerivedMesh *dm,
 	/* if non zero we know a face was rendered */
 	if (poly_prev != GL_ZERO) glEnd();
 }
+
+static void emDM_drawPreselFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	BMFace *efa;
+	struct BMLoop *(*looptris)[3] = bmdm->em->looptris;
+	const int tottri = bmdm->em->tottri;
+	GLfloat *vertices;
+	GLubyte *colors;
+	int vpos = 0;
+	int cpos = 0;
+	int i, j, idx, numtrias = 0;
+	bool vset = false;
+	const float (*vertexCos)[3] = bmdm->vertexCos;
+	
+	if (bmdm->vertexCos) {
+		vset = true;
+	}
+
+	BM_mesh_elem_index_ensure(em->bm, BM_VERT | BM_FACE);
+	
+	
+	glEnable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
+	glBegin(GL_TRIANGLES);
+	for (i = 0; i < tottri; i++) {
+		BMLoop **ltri = looptris[i];
+
+		efa = ltri[0]->f;
+		idx = efa->head.index;
+		if (BLI_ghash_haskey(em->presel_faces, efa)) {
+			if (BM_elem_flag_test(efa, BM_ELEM_SELECT))
+				glColor4ubv(sel_col);
+			else
+				glColor4ubv(nosel_col);
+		}
+		else continue;
+		
+		for (j = 0; j < 3; j++) {
+			if (vset) {
+				glVertex3fv(vertexCos[BM_elem_index_get(ltri[j]->v)]);
+			}
+			else {
+				glVertex3fv(ltri[j]->v->co);
+			}
+			vpos += 3;
+		numtrias++;
+		}
+	}
+	glEnd();
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+}
+
+static void emDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char prop_col[4], bool occluded, bool selected)
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	BMFace *efa;
+	struct BMLoop *(*looptris)[3] = bmdm->em->looptris;
+	const int tottri = bmdm->em->tottri;
+	GLfloat *vertices;
+	GLubyte *colors;
+	int vpos = 0;
+	int cpos = 0;
+	int i, j, numtrias = 0;
+	unsigned char *col;
+	bool vset = false;
+	const float (*vertexCos)[3] = bmdm->vertexCos;
+	float alphafac = (float)prop_col[3] / 255.0f;
+	
+	/* reserve max elements */
+	vertices = MEM_mallocN(sizeof(GLfloat) * tottri * 3 * 3, "VertexArray F");
+	colors = MEM_mallocN(sizeof(GLubyte) * tottri * 3 * 4, "ColorArray F");
+	
+	if (bmdm->vertexCos) {
+		vset = true;
+	}
+
+	BM_mesh_elem_index_ensure(em->bm, BM_VERT | BM_FACE);
+	
+	for (i = 0; i < tottri; i++) {
+		BMLoop **ltri = looptris[i];
+
+		efa = ltri[0]->f;
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) != selected) continue;
+		if (BLI_ghash_haskey(em->prop3d_faces, efa)) {                  
+			prop_col[3] = (char)BLI_ghash_lookup(em->prop3d_faces, efa) * alphafac;
+			col = prop_col;
+		}
+		else continue;
+		
+		for (j = 0; j < 3; j++) {
+			memcpy(&colors[cpos], col, sizeof(GLubyte) * 4);
+			cpos += 4;
+			if (vset) {
+				memcpy(&vertices[vpos], vertexCos[BM_elem_index_get(ltri[j]->v)], sizeof(GLfloat) * 3);
+			}
+			else {
+				memcpy(&vertices[vpos], ltri[j]->v->co, sizeof(GLfloat) * 3);
+			}
+			vpos += 3;
+		numtrias++;
+		}
+	}
+	
+	glEnable(GL_BLEND);
+	if (!occluded)
+		glDisable(GL_DEPTH_TEST);
+	
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+	glVertexPointer(3, GL_FLOAT, 0, vertices);
+	glColorPointer(4, GL_UNSIGNED_BYTE, 0, colors);
+
+	glDrawArrays(GL_TRIANGLES, 0, numtrias);
+	
+	glDisableClientState(GL_COLOR_ARRAY);
+	glDisableClientState(GL_VERTEX_ARRAY);
+	
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	MEM_freeN(vertices);
+	MEM_freeN(colors);
+}
+
+static void emDM_drawPreselFaceNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	BMEditMesh *em = bmdm->em;
+	BMFace *efa;
+	float center[3];
+	float *no;
+	
+	efa = BM_face_at_index(em->bm, bmindex);
+	no = efa->no;
+	BM_face_calc_center_mean(efa, center);
+	
+	glColor3ubv(normal_col);
+	glBegin(GL_LINES);
+	func(userData, bmindex, center, no);
+	glEnd();
+}
+	
+static void emDM_drawPreselVertNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	EditDerivedBMesh *bmdm = (EditDerivedBMesh *)dm;
+	BMEditMesh *em = bmdm->em;
+	BMVert *eve;
+	
+	eve = BM_vert_at_index(em->bm, bmindex);
+	
+	glColor3ubv(normal_col);
+	glBegin(GL_LINES);
+	func(userData, bmindex, eve->co, eve->no);
+	glEnd();
+}
+	
 
 static void bmdm_get_tri_uv(BMLoop *ltri[3], MLoopUV *luv[3], const int cd_loop_uv_offset)
 {
@@ -1690,7 +1956,7 @@ DerivedMesh *getEditDerivedBMesh(BMEditMesh *em,
 	bmdm->dm.foreachMappedVert = emDM_foreachMappedVert;
 	bmdm->dm.foreachMappedEdge = emDM_foreachMappedEdge;
 	bmdm->dm.foreachMappedFaceCenter = emDM_foreachMappedFaceCenter;
-
+	
 	bmdm->dm.drawEdges = emDM_drawEdges;
 	bmdm->dm.drawMappedEdges = emDM_drawMappedEdges;
 	bmdm->dm.drawMappedEdgesInterp = emDM_drawMappedEdgesInterp;
@@ -1701,6 +1967,14 @@ DerivedMesh *getEditDerivedBMesh(BMEditMesh *em,
 	bmdm->dm.drawFacesTex = emDM_drawFacesTex;
 	bmdm->dm.drawFacesGLSL = emDM_drawFacesGLSL;
 	bmdm->dm.drawUVEdges = emDM_drawUVEdges;
+
+	bmdm->dm.drawPreselVerts = emDM_drawPreselVerts;
+	bmdm->dm.drawPreselEdges = emDM_drawPreselEdges;
+	bmdm->dm.drawPreselEdgesInterp = emDM_drawPreselEdgesInterp;
+	bmdm->dm.drawPreselFaces = emDM_drawPreselFaces;
+	bmdm->dm.drawPreselPropFaces = emDM_drawPreselPropFaces;
+	bmdm->dm.drawPreselFaceNormal = emDM_drawPreselFaceNormal;
+	bmdm->dm.drawPreselVertNormal = emDM_drawPreselVertNormal;
 
 	bmdm->dm.release = emDM_release;
 

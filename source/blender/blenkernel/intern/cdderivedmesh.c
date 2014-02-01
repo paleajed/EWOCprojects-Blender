@@ -1062,6 +1062,226 @@ static void cdDM_drawMappedFacesTex(DerivedMesh *dm,
 	cdDM_drawFacesTex_common(dm, NULL, setDrawOptions, compareDrawOptions, userData);
 }
 
+static void cdDM_drawPreselFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
+	MVert *mv = cddm->mvert;
+	MFace *mf = cddm->mface;
+	GHashIterator *iter;
+	BMFace *efa;
+	int i, orig;
+	int length = BLI_ghash_size(em->presel_faces);
+	int *indices = MEM_callocN(length * sizeof(int), "presel face indices");
+	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "presel faces");
+	int pos = 0;
+	
+	/* double lookup */
+	const int *index_mf_to_mpoly = dm->getTessFaceDataArray(dm, CD_ORIGINDEX);
+	const int *index_mp_to_orig  = dm->getPolyDataArray(dm, CD_ORIGINDEX);
+
+	if (index_mf_to_mpoly == NULL) {
+		index_mp_to_orig = NULL;
+	}
+
+	iter = BLI_ghashIterator_new(em->presel_faces);
+	efa = BLI_ghashIterator_getKey(iter);
+	while (efa) {
+		indices[pos] = efa->head.index;
+		faces[pos] = efa;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		efa = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+	
+	glEnable(GL_BLEND);	
+	glDisable(GL_DEPTH_TEST);
+	mf = cddm->mface;
+	for (i = 0; i < dm->numTessFaceData; i++, mf++) {
+		int j;
+		
+		orig = (index_mf_to_mpoly) ? DM_origindex_mface_mpoly(index_mf_to_mpoly, index_mp_to_orig, i) : i;
+
+		efa = NULL;
+		for (j = 0; j < length; j++) {
+			if (indices[j] == orig) {
+				efa = faces[j];
+				break;
+			}
+		}
+		
+		if (efa) {
+			if (BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
+				glColor4ubv(sel_col);
+			}
+			else {
+				glColor4ubv(nosel_col);
+			}
+		}
+		else continue;
+		
+		glShadeModel(GL_SMOOTH);
+		glBegin(mf->v4 ? GL_QUADS : GL_TRIANGLES);
+
+		glVertex3fv(mv[mf->v1].co);
+		glVertex3fv(mv[mf->v2].co);
+		glVertex3fv(mv[mf->v3].co);
+		if (mf->v4) {
+			glVertex3fv(mv[mf->v4].co);
+		}
+		glEnd();
+	}
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	
+	MEM_freeN(indices);
+	MEM_freeN(faces);
+}
+
+static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char prop_col[4], bool occluded, bool selected)
+{
+	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
+	MVert *mv = cddm->mvert;
+	MFace *mf = cddm->mface;
+	GHashIterator *iter;
+	BMFace *efa;
+	int i, orig;
+	int length = BLI_ghash_size(em->prop3d_faces);
+	int *indices = MEM_callocN(length * sizeof(int), "prop presel face indices");
+	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "prop presel faces");
+	int pos = 0;
+	float alphafac = (float)prop_col[3] / 255.0f;
+	
+	/* double lookup */
+	const int *index_mf_to_mpoly = dm->getTessFaceDataArray(dm, CD_ORIGINDEX);
+	const int *index_mp_to_orig  = dm->getPolyDataArray(dm, CD_ORIGINDEX);
+
+	if (index_mf_to_mpoly == NULL) {
+		index_mp_to_orig = NULL;
+	}
+
+	iter = BLI_ghashIterator_new(em->prop3d_faces);
+	efa = (BMFace *)BLI_ghashIterator_getKey(iter);
+	while (efa) {
+		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
+			indices[pos] = efa->head.index;
+			faces[pos] = efa;
+			pos++;
+		}
+	
+		BLI_ghashIterator_step(iter);
+		efa = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+	
+	glEnable(GL_BLEND);	
+	if (!occluded)
+		glDisable(GL_DEPTH_TEST);
+	mf = cddm->mface;
+	for (i = 0; i < dm->numTessFaceData; i++, mf++) {
+		int j;
+		
+		orig = (index_mf_to_mpoly) ? DM_origindex_mface_mpoly(index_mf_to_mpoly, index_mp_to_orig, i) : i;
+
+		efa = NULL;
+		for (j = 0; j < pos; j++) {
+			if (indices[j] == orig) {
+				efa = faces[j];
+				break;
+			}
+		}
+		
+		if (efa) {
+			prop_col[3] = (char)BLI_ghash_lookup(em->prop3d_faces, efa) * alphafac;
+			glColor4ubv(prop_col);
+			printf("%d\n", prop_col[3]);
+		
+			glShadeModel(GL_SMOOTH);
+			glBegin(mf->v4 ? GL_QUADS : GL_TRIANGLES);
+	
+			glVertex3fv(mv[mf->v1].co);
+			glVertex3fv(mv[mf->v2].co);
+			glVertex3fv(mv[mf->v3].co);
+			if (mf->v4) {
+				glVertex3fv(mv[mf->v4].co);
+			}
+			glEnd();
+		}
+	}
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	
+	MEM_freeN(indices);
+	MEM_freeN(faces);
+}
+
+
+static void cdDM_drawPreselFaceNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	CDDerivedMesh *cddm = (CDDerivedMesh *)dm;
+	MVert *mvert = cddm->mvert;
+	MPoly *mp;
+	MLoop *ml;
+	int i, orig, *index;
+
+	index = CustomData_get_layer(&dm->polyData, CD_ORIGINDEX);
+	mp = cddm->mpoly;
+	for (i = 0; i < dm->numPolyData; i++, mp++) {
+		if (index) {
+			orig = *index++;
+		}
+		else {
+			orig = i;
+		}
+		
+		if (orig == bmindex) {
+			float no[3], center[3];
+			
+			ml = &cddm->mloop[mp->loopstart];
+			BKE_mesh_calc_poly_center(mp, ml, mvert, center);
+			BKE_mesh_calc_poly_normal(mp, ml, mvert, no);
+			
+			glColor3ubv(normal_col);
+			glBegin(GL_LINES);
+			func(userData, bmindex, center, no);
+			glEnd();
+		}
+	}
+}
+
+static void cdDM_drawPreselVertNormal(int bmindex, DerivedMesh *dm, 
+			void (*func)(void *userData, int index, const float co[3], const float no[3]),
+			unsigned char normal_col[4], void *userData)
+{
+	CDDerivedMesh *cddm = (CDDerivedMesh *)dm;
+	MVert *mvert = cddm->mvert;
+	int i, orig, *index;
+
+	index = CustomData_get_layer(&dm->vertData, CD_ORIGINDEX);
+	for (i = 0; i < dm->numVertData; i++, mvert++) {
+		float no[3];
+	
+		if (index) {
+			orig = *index++;
+		}
+		else {
+			orig = i;
+		}
+		
+		normal_short_to_float_v3(no, mvert->no);		
+		if (orig == bmindex) {
+			glColor3ubv(normal_col);
+			glBegin(GL_LINES);
+			func(userData, bmindex, mvert->co, no);
+			glEnd();
+		}
+	}
+}
+
+
 static void cddm_draw_attrib_vertex(DMVertexAttribs *attribs, MVert *mvert, int a, int index, int vert, int smoothnormal)
 {
 	const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -1577,6 +1797,144 @@ static void cdDM_drawMappedEdges(DerivedMesh *dm, DMSetDrawOptions setDrawOption
 	glEnd();
 }
 
+static void cdDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm,
+                                  unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	GHashIterator *iter;
+	BMEdge *eed;
+	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
+	MVert *vert = cddm->mvert;
+	MEdge *edge = cddm->medge;
+	int i, orig, *index = DM_get_edge_data_layer(dm, CD_ORIGINDEX);
+	int length = BLI_ghash_size(em->presel_edges);
+	int *indices = MEM_callocN(length * sizeof(int), "presel edge indices");
+	BMEdge **edges = MEM_callocN(length * sizeof(BMEdge*), "presel edges");
+	int pos = 0;
+	
+	iter = BLI_ghashIterator_new(em->presel_edges);
+	eed = BLI_ghashIterator_getKey(iter);
+	while (eed) {
+		indices[pos] = eed->head.index;
+		edges[pos] = eed;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		eed = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	glBegin(GL_LINES);
+	for (i = 0; i < dm->numEdgeData; i++, edge++) {
+		int j;
+	
+		if (index) {
+			orig = *index++;
+		}
+		else
+			orig = i;
+
+		for (j = 0; j < length; j++) {
+			if (indices[j] == orig) {
+				if (BM_elem_flag_test(edges[j], BM_ELEM_SELECT)) {
+					glColor3ubv(sel_col);
+				}
+				else {
+					glColor3ubv(nosel_col);
+				}
+				glVertex3fv(vert[edge->v1].co);
+				glVertex3fv(vert[edge->v2].co);
+			}
+		}
+	}
+	glEnd();
+	
+	MEM_freeN(indices);
+	MEM_freeN(edges);
+}
+
+static void cdDM_drawPreselEdgesInterp(BMVert *eve, BMEditMesh *em, DerivedMesh *dm,
+                                  unsigned char conn_col[4])
+{
+	BMEdge *eed;
+	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
+	MVert *vert = cddm->mvert;
+	MEdge *edge = cddm->medge;
+	int i, orig, *index = DM_get_edge_data_layer(dm, CD_ORIGINDEX);
+
+	glEnable(GL_BLEND);
+	conn_col[3] = 125;
+	glColor4ubv(conn_col);
+	glBegin(GL_LINES);
+	for (i = 0; i < dm->numEdgeData; i++, edge++) {
+		if (index)
+			orig = *index++;
+		else
+			orig = i;
+		eed = BM_edge_at_index(em->bm, orig);
+		if (eed) {
+			if (!((eed->v1 == eve) || (eed->v2 == eve)))
+				continue;
+			
+			glVertex3fv(vert[edge->v1].co);
+			glVertex3fv(vert[edge->v2].co);
+		}
+	}
+	glEnd();
+	glDisable(GL_BLEND);
+}
+
+static void cdDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm,
+                                  unsigned char sel_col[4], unsigned char nosel_col[4])
+{
+	GHashIterator *iter;
+	BMVert *eve;
+	MVert *mv = CDDM_get_verts(dm);
+	int i, orig, *index = DM_get_vert_data_layer(dm, CD_ORIGINDEX);
+	int length = BLI_ghash_size(em->presel_verts);
+	int *indices = MEM_callocN(length * sizeof(int), "presel vert indices");
+	BMVert **verts = MEM_callocN(length * sizeof(BMVert*), "presel verts");
+	int pos = 0;
+	
+	iter = BLI_ghashIterator_new(em->presel_verts);
+	eve = BLI_ghashIterator_getKey(iter);
+	while (eve) {
+		indices[pos] = eve->head.index;
+		verts[pos] = eve;
+		pos++;
+	
+		BLI_ghashIterator_step(iter);
+		eve = BLI_ghashIterator_getKey(iter);
+	}
+	BLI_ghashIterator_free(iter);
+
+	glBegin(GL_POINTS);
+	for (i = 0; i < dm->numVertData; i++, mv++) {
+		int j;
+		
+		if (index) {
+			orig = *index++;
+		}
+		else
+			orig = i;
+
+		for (j = 0; j < length; j++) {
+			if (indices[j] == orig) {
+				if (BM_elem_flag_test(verts[j], BM_ELEM_SELECT)) {
+					glColor3ubv(sel_col);
+				}
+				else {
+					glColor3ubv(nosel_col);
+				}
+				glVertex3fv(mv->co);
+			}
+		}
+	}
+	glEnd();
+	
+	MEM_freeN(indices);
+	MEM_freeN(verts);
+}
+
 static void cdDM_foreachMappedVert(
         DerivedMesh *dm,
         void (*func)(void *userData, int index, const float co[3], const float no_f[3], const short no_s[3]),
@@ -1765,6 +2123,14 @@ static CDDerivedMesh *cdDM_create(const char *desc)
 	dm->drawMappedFacesTex = cdDM_drawMappedFacesTex;
 	dm->drawMappedFacesGLSL = cdDM_drawMappedFacesGLSL;
 	dm->drawMappedFacesMat = cdDM_drawMappedFacesMat;
+	
+	dm->drawPreselVerts = cdDM_drawPreselVerts;
+	dm->drawPreselEdges = cdDM_drawPreselEdges;
+	dm->drawPreselEdgesInterp = cdDM_drawPreselEdgesInterp;
+	dm->drawPreselFaces = cdDM_drawPreselFaces;
+	dm->drawPreselPropFaces = cdDM_drawPreselPropFaces;
+	dm->drawPreselFaceNormal = cdDM_drawPreselFaceNormal;
+	dm->drawPreselVertNormal = cdDM_drawPreselVertNormal;
 
 	dm->foreachMappedVert = cdDM_foreachMappedVert;
 	dm->foreachMappedEdge = cdDM_foreachMappedEdge;

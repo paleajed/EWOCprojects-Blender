@@ -51,6 +51,8 @@ struct wmKeyConfig;
 struct bContext;
 struct wmLocal;
 struct bScreen;
+struct ScrArea;
+struct ARegion;
 struct uiBlock;
 struct wmSubWindow;
 struct wmTimer;
@@ -154,6 +156,9 @@ typedef struct wmWindowManager {
 
 	ListBase timers;                  /* active timers */
 	struct wmTimer *autosavetimer;    /* timer for auto save */
+	
+	struct ScrArea  *act_area;			/* mouseover area */
+	struct ARegion  *act_region;		/* mouseover region */	
 } wmWindowManager;
 
 /* wmWindowManager.initialized */
@@ -202,6 +207,10 @@ typedef struct wmWindow {
 
 	ListBase subwindows;          /* opengl stuff for sub windows, see notes in wm_subwindow.c */
 	ListBase gesture;             /* gesture stuff */
+	
+	short gesture_level;	/* gesture type of gesture taking precedence momentarily */
+	short pad3[3];
+	
 } wmWindow;
 
 /* These two Lines with # tell makesdna this struct can be excluded. */

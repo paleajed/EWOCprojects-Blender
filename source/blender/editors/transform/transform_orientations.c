@@ -97,6 +97,25 @@ static void uniqueOrientationName(ListBase *lb, char *name)
 	                  sizeof(((TransformOrientation *)NULL)->name));
 }
 
+
+static TransformOrientation *createManipSpace(bContext *C, ReportList *UNUSED(reports), char *name, int overwrite)
+{
+	TransformOrientation *ts;
+	RegionView3D *rv3d = CTX_wm_region_view3d(C);
+	float mat[3][3];
+
+	if (!rv3d)
+		return NULL;
+
+	copy_m3_m4(mat, rv3d->twsetmat);
+	normalize_m3(mat);
+	
+	ts = addMatrixSpace(C, mat, name, overwrite);
+	copy_v3_v3(ts->loc, rv3d->twsetmat[3]); 
+
+	return ts;
+}
+
 static TransformOrientation *createViewSpace(bContext *C, ReportList *UNUSED(reports),
                                              const char *name, const bool overwrite)
 {
@@ -295,9 +314,16 @@ void BIF_createTransformOrientation(bContext *C, ReportList *reports,
                                     const bool activate, const bool overwrite)
 {
 	TransformOrientation *ts = NULL;
-
-	if (use_view) {
+	View3D *v3d = CTX_wm_view3d(C);
+	
+	if (v3d->twflag & (V3D_SET_MANIPULATOR | V3D_FREE_MANIPULATOR)) {
+		ts = createManipSpace(C, reports, name, overwrite);
+		ts->useloc = true;
+	}
+	else if (use_view) {
 		ts = createViewSpace(C, reports, name, overwrite);
+		if (v3d->around == V3D_FREE)
+			ts->useloc = true;
 	}
 	else {
 		Object *obedit = CTX_data_edit_object(C);
@@ -316,6 +342,7 @@ void BIF_createTransformOrientation(bContext *C, ReportList *reports,
 		else {
 			ts = createObjectSpace(C, reports, name, overwrite);
 		}
+		ts->useloc = false;
 	}
 
 	if (activate && ts != NULL) {
@@ -423,6 +450,24 @@ bool applyTransformOrientation(const bContext *C, float mat[3][3], char *r_name)
 	}
 }
 
+bool applyTransformLocation(const bContext *C, float loc[3])
+{
+	TransformOrientation *ts;
+	View3D *v3d = CTX_wm_view3d(C);
+	int selected_index = (v3d->twmode - V3D_MANIP_CUSTOM);
+	int i;
+	
+	if (selected_index >= 0) {
+		for (i = 0, ts = CTX_data_scene(C)->transform_spaces.first; ts; ts = ts->next, i++) {
+			if (selected_index == i) {
+				copy_v3_v3(loc, ts->loc);
+				return (bool)ts->useloc;
+			}
+		}
+	}
+	return false;
+}
+
 static int count_bone_select(bArmature *arm, ListBase *lb, const bool do_it)
 {
 	Bone *bone;
@@ -452,6 +497,7 @@ static int count_bone_select(bArmature *arm, ListBase *lb, const bool do_it)
 void initTransformOrientation(bContext *C, TransInfo *t)
 {
 	View3D *v3d = CTX_wm_view3d(C);
+	RegionView3D *rv3d = CTX_wm_region_view3d(C);
 	Object *ob = CTX_data_active_object(C);
 	Object *obedit = CTX_data_active_object(C);
 
@@ -503,13 +549,24 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			}
 			break;
 		default: /* V3D_MANIP_CUSTOM */
-			if (applyTransformOrientation(C, t->spacemtx, t->spacename)) {
-				/* pass */
+			{
+				float center[3];
+				bool retval;
+				
+				if (applyTransformOrientation(C, t->spacemtx, t->spacename)) {
+					retval = applyTransformLocation(C, center);
+					if (retval) {
+						v3d->twflag |= V3D_FREE_MANIPULATOR;
+						t->flag |= T_MANIP_FREE;
+						v3d->around = V3D_FREE;
+						copy_v3_v3(rv3d->twsetmat[3], center);
+					}
+				}
+				else {
+					unit_m3(t->spacemtx);
+				}
+				break;
 			}
-			else {
-				unit_m3(t->spacemtx);
-			}
-			break;
 	}
 }
 

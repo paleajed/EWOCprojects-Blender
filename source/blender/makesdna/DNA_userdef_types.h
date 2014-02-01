@@ -227,8 +227,8 @@ typedef struct ThemeSpace {
 	char grid[4]; 
 	
 	char wire[4], wire_edit[4], select[4];
-	char lamp[4], speaker[4], empty[4], camera[4], pad[4];
-	char active[4], group[4], group_active[4], transform[4];
+	char lamp[4], speaker[4], empty[4], camera[4], pad1[4];
+	char active[4], group[4], group_active[4], transform[4], transform_set[4];
 	char vertex[4], vertex_select[4], vertex_unreferenced[4];
 	char edge[4], edge_select[4];
 	char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4];
@@ -241,6 +241,7 @@ typedef struct ThemeSpace {
 	char strip[4], strip_select[4];
 	char cframe[4];
 	char freestyle_edge_mark[4], freestyle_face_mark[4];
+	char presel_select[4], presel_noselect[4], presel_prop[4], pad2[4];
 	
 	char nurb_uline[4], nurb_vline[4];
 	char act_spline[4], nurb_sel_uline[4], nurb_sel_vline[4], lastsel_point[4];
@@ -251,7 +252,7 @@ typedef struct ThemeSpace {
 	char ds_channel[4], ds_subchannel[4]; /* dopesheet */
 	
 	char console_output[4], console_input[4], console_info[4], console_error[4];
-	char console_cursor[4], console_select[4], pad1[4];
+	char console_cursor[4], console_select[4], pad3[4];
 	
 	char vertex_size, outline_width, facedot_size;
 	char noodle_curving;
@@ -273,7 +274,6 @@ typedef struct ThemeSpace {
 
 	char handle_vertex[4];
 	char handle_vertex_select[4];
-	char pad2[4];
 	
 	char handle_vertex_size;
 	
@@ -557,6 +557,7 @@ typedef enum eUserPref_Flag {
 	USER_NONEGFRAMES		= (1 << 24),
 	USER_TXT_TABSTOSPACES_DISABLE	= (1 << 25),
 	USER_TOOLTIPS_PYTHON    = (1 << 26),
+	USER_GROW_CIRCLESELECT	= (1 << 27)
 } eUserPref_Flag;
 
 /* flag */

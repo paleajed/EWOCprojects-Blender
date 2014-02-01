@@ -3337,7 +3337,7 @@ static int dynamicPaint_paintMesh(DynamicPaintSurface *surface,
 		/* check bounding box collision */
 		if (grid && meshBrush_boundsIntersect(&grid->grid_bounds, &mesh_bb, brush, brush_radius)) {
 			/* Build a bvh tree from transformed vertices	*/
-			if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 8)) {
+			if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 8, true)) {
 				int c_index;
 				int total_cells = grid->dim[0] * grid->dim[1] * grid->dim[2];
 

@@ -330,6 +330,7 @@ typedef struct wmNotifier {
 #define ND_SELECT			(90<<16)
 #define ND_DATA				(91<<16)
 #define ND_VERTEX_GROUP		(92<<16)
+#define ND_PRESELECT		(93<<16)
 
 	/* NC_NODE Nodes */
 
@@ -382,17 +383,20 @@ typedef struct wmNotifier {
 #define NA_RENAME			5
 #define NA_SELECTED			6
 #define NA_PAINTING			7
+#define NA_TRANSFORMED		8
 
 /* ************** Gesture Manager data ************** */
 
-/* wmGesture->type */
-#define WM_GESTURE_TWEAK		0
-#define WM_GESTURE_LINES		1
-#define WM_GESTURE_RECT			2
-#define WM_GESTURE_CROSS_RECT	3
+/* wmGesture->type, also used to set win->gesture_level */
+#define WM_GESTURE_NONE			0	/* should always be first in list */
+#define WM_GESTURE_TWEAK		1
+#define WM_GESTURE_CIRCLE		2
+#define WM_GESTURE_STRAIGHTLINE	3
 #define WM_GESTURE_LASSO		4
-#define WM_GESTURE_CIRCLE		5
-#define WM_GESTURE_STRAIGHTLINE	6
+#define WM_GESTURE_CROSS_RECT	6
+#define WM_GESTURE_RECT			5
+#define WM_GESTURE_LINES		7
+#define WM_GESTURE_OVERRIDE		8	/* type for anything overriding gestures */
 
 /* wmGesture is registered to window listbase, handled by operator callbacks */
 /* tweak gesture is builtin feature */
@@ -407,7 +411,7 @@ typedef struct wmGesture {
 	
 	void *customdata;
 	/* customdata for border is a recti */
-	/* customdata for circle is recti, (xmin, ymin) is center, xmax radius */
+	/* customdata for circle is rectf, (xmin, ymin) is center, xmax radius */
 	/* customdata for lasso is short array */
 	/* customdata for straight line is a recti: (xmin,ymin) is start, (xmax, ymax) is end */
 

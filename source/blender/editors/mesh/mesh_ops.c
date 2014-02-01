@@ -126,8 +126,10 @@ void ED_operatortypes_mesh(void)
 	WM_operatortype_append(MESH_OT_separate);
 	WM_operatortype_append(MESH_OT_dupli_extrude_cursor);
 	WM_operatortype_append(MESH_OT_loop_select);
+	WM_operatortype_append(MESH_OT_loop_presel);
 	WM_operatortype_append(MESH_OT_edge_face_add);
 	WM_operatortype_append(MESH_OT_shortest_path_pick);
+	WM_operatortype_append(MESH_OT_shortest_path_presel);
 	WM_operatortype_append(MESH_OT_select_similar);
 	WM_operatortype_append(MESH_OT_select_mode);
 	WM_operatortype_append(MESH_OT_loop_multi_select);
@@ -153,6 +155,7 @@ void ED_operatortypes_mesh(void)
 	WM_operatortype_append(MESH_OT_drop_named_image);
 
 	WM_operatortype_append(MESH_OT_edgering_select);
+	WM_operatortype_append(MESH_OT_edgering_presel);
 	WM_operatortype_append(MESH_OT_loopcut);
 
 	WM_operatortype_append(MESH_OT_solidify);
@@ -243,6 +246,7 @@ void ED_operatormacros_mesh(void)
 	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_region");
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "extruding", true);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
 
 	ot = WM_operatortype_append_macro("MESH_OT_extrude_region_shrink_fatten", "Extrude Region and Shrink/Fatten",
@@ -257,6 +261,7 @@ void ED_operatormacros_mesh(void)
 	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_faces_indiv");
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_shrink_fatten");
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "extruding", true);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
 
 	ot = WM_operatortype_append_macro("MESH_OT_extrude_edges_move", "Extrude Only Edges and Move",
@@ -264,6 +269,7 @@ void ED_operatormacros_mesh(void)
 	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_edges_indiv");
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "extruding", true);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
 
 	ot = WM_operatortype_append_macro("MESH_OT_extrude_vertices_move", "Extrude Only Vertices and Move",
@@ -271,6 +277,7 @@ void ED_operatormacros_mesh(void)
 	otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_verts_indiv");
 	otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
 	RNA_enum_set(otmacro->ptr, "proportional", 0);
+	RNA_boolean_set(otmacro->ptr, "extruding", true);
 	RNA_boolean_set(otmacro->ptr, "mirror", false);
 }
 
@@ -312,7 +319,8 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "deselect", false);
 	RNA_boolean_set(kmi->ptr, "toggle", true);
 
-	WM_keymap_add_item(keymap, "MESH_OT_shortest_path_pick", SELECTMOUSE, KM_PRESS, KM_CTRL, 0);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_pick", SELECTMOUSE, KM_PRESS, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_select_all", AKEY, KM_PRESS, 0, 0);
 	RNA_enum_set(kmi->ptr, "action", SEL_TOGGLE);
@@ -336,6 +344,66 @@ void ED_keymap_mesh(wmKeyConfig *keyconf)
 	/* selection mode */
 	WM_keymap_add_menu(keymap, "VIEW3D_MT_edit_mesh_select_mode", TABKEY, KM_PRESS, KM_CTRL, 0);
 	
+	/* preselection */
+	/* FIXME this really shows a shortcoming of the current keymap system */
+	/* all the different combinations combined here should be auto-generated */
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", LEFTALTKEY, KM_PRESS, 0, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", RIGHTALTKEY, KM_PRESS, 0, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", LEFTALTKEY, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", RIGHTALTKEY, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", LEFTSHIFTKEY, KM_PRESS, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", RIGHTSHIFTKEY, KM_PRESS, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", MOUSEMOVE, KM_ANY, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_loop_presel", MOUSEMOVE, KM_ANY, KM_ALT | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", LEFTALTKEY, KM_PRESS, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", RIGHTALTKEY, KM_PRESS, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", LEFTCTRLKEY, KM_PRESS, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", RIGHTCTRLKEY, KM_PRESS, KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", LEFTALTKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", RIGHTALTKEY, KM_PRESS, KM_CTRL | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", LEFTCTRLKEY, KM_PRESS, KM_ALT | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", RIGHTCTRLKEY, KM_PRESS, KM_ALT | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", LEFTSHIFTKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", RIGHTSHIFTKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", MOUSEMOVE, KM_ANY, KM_ALT | KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_edgering_presel", MOUSEMOVE, KM_ANY, KM_ALT | KM_CTRL | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", LEFTCTRLKEY, KM_PRESS, 0, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", RIGHTCTRLKEY, KM_PRESS, 0, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", LEFTCTRLKEY, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", RIGHTCTRLKEY, KM_PRESS, KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", LEFTSHIFTKEY, KM_PRESS, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", RIGHTSHIFTKEY, KM_PRESS, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", MOUSEMOVE, KM_ANY, KM_CTRL, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+	kmi = WM_keymap_add_item(keymap, "MESH_OT_shortest_path_presel", MOUSEMOVE, KM_ANY, KM_CTRL | KM_SHIFT, 0);
+	RNA_boolean_set(kmi->ptr, "presel", true);
+
 	/* hide */
 	kmi = WM_keymap_add_item(keymap, "MESH_OT_hide", HKEY, KM_PRESS, 0, 0);
 	RNA_boolean_set(kmi->ptr, "unselected", false);

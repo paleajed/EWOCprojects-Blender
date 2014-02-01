@@ -72,27 +72,37 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
 	gesture->event_type = event->type;
 	gesture->swinid = ar->swinid;    /* means only in area-region context! */
 	
+	WM_gestures_update_level(window);
+	
 	wm_subwindow_getorigin(window, gesture->swinid, &sx, &sy);
 	
-	if (ELEM5(type, WM_GESTURE_RECT, WM_GESTURE_CROSS_RECT, WM_GESTURE_TWEAK,
-	          WM_GESTURE_CIRCLE, WM_GESTURE_STRAIGHTLINE))
+	if (ELEM4(type, WM_GESTURE_RECT, WM_GESTURE_CROSS_RECT, WM_GESTURE_TWEAK,
+	          WM_GESTURE_STRAIGHTLINE))
 	{
 		rcti *rect = MEM_callocN(sizeof(rcti), "gesture rect new");
 		
 		gesture->customdata = rect;
 		rect->xmin = event->x - sx;
 		rect->ymin = event->y - sy;
-		if (type == WM_GESTURE_CIRCLE) {
+		rect->xmax = event->x - sx;
+		rect->ymax = event->y - sy;
+	}
+	else if (type == WM_GESTURE_CIRCLE) {
+		rctf *rect = MEM_callocN(sizeof(rctf), "gesture rect new");
+		
+		gesture->customdata = rect;
+		rect->xmin = event->x - sx;
+		rect->ymin = event->y - sy;
 #ifdef GESTURE_MEMORY
-			rect->xmax = circle_select_size;
-#else
-			rect->xmax = 25;    // XXX temp
-#endif
+		if (U.flag & USER_GROW_CIRCLESELECT) {
+			rect->xmax = 40;
 		}
 		else {
-			rect->xmax = event->x - sx;
-			rect->ymax = event->y - sy;
+			rect->xmax = circle_select_size;
 		}
+#else
+		rect->xmax = 40;    // XXX temp
+#endif
 	}
 	else if (ELEM(type, WM_GESTURE_LINES, WM_GESTURE_LASSO)) {
 		short *lasso;
@@ -113,6 +123,7 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
 	if (win->tweak == gesture)
 		win->tweak = NULL;
 	BLI_remlink(&win->gesture, gesture);
+	WM_gestures_update_level(win);
 	MEM_freeN(gesture->customdata);
 	if (gesture->userdata) {
 		MEM_freeN(gesture->userdata);
@@ -120,6 +131,7 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
 	MEM_freeN(gesture);
 }
 
+/* now not used currently because of win->gesture_level system */
 void WM_gestures_remove(bContext *C)
 {
 	wmWindow *win = CTX_wm_window(C);
@@ -128,6 +140,28 @@ void WM_gestures_remove(bContext *C)
 		WM_gesture_end(C, win->gesture.first);
 }
 
+void WM_gestures_reset_level(wmWindow *win)
+{
+	win->gesture_level = WM_GESTURE_NONE;
+	WM_gestures_update_level(win);
+}
+
+void WM_gestures_update_level(wmWindow *win)
+{
+	wmGesture *gesture;
+	short level = WM_GESTURE_NONE;
+	
+	if (win->gesture_level != WM_GESTURE_OVERRIDE) {	/* OVERRIDE should clean up itself by setting WM_GESTURE_NONE */
+		gesture = win->gesture.first;
+		while (gesture) {
+			if (gesture->type > level)
+				level = gesture->type;
+			gesture = gesture->next;
+		}
+		win->gesture_level = level;
+	}
+}
+	
 
 /* tweak and line gestures */
 int wm_gesture_evaluate(wmGesture *gesture)
@@ -210,9 +244,9 @@ static void wm_gesture_draw_line(wmGesture *gt)
 
 static void wm_gesture_draw_circle(wmGesture *gt)
 {
-	rcti *rect = (rcti *)gt->customdata;
+	rctf *rect = (rctf *)gt->customdata;
 
-	glTranslatef((float)rect->xmin, (float)rect->ymin, 0.0f);
+	glTranslatef(rect->xmin, rect->ymin, 0.0f);
 
 	glEnable(GL_BLEND);
 	glColor4f(1.0, 1.0, 1.0, 0.05);
@@ -351,6 +385,9 @@ void wm_gesture_draw(wmWindow *win)
 	wmGesture *gt = (wmGesture *)win->gesture.first;
 	
 	for (; gt; gt = gt->next) {
+		/* only draw top level gesture */
+		if (gt->type != win->gesture_level) continue;
+	
 		/* all in subwindow space */
 		wmSubWindowSet(win, gt->swinid);
 		

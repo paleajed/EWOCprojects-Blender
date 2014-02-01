@@ -23,6 +23,7 @@ set(INC
 	../../blenfont
 	../../blenkernel
 	../../blenlib
+	../../editors/space_view3d
 	../../imbuf
 	../../bmesh
 	../../makesdna

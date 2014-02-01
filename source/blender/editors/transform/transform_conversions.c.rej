@@ -1,0 +1,70 @@
+--- source/blender/editors/transform/transform_conversions.c	(revision 60799)
++++ source/blender/editors/transform/transform_conversions.c	(working copy)
+@@ -188,12 +188,14 @@
+ {
+ 	TransData *sel, *unsel;
+ 	TransData temp;
++	int count = 0;
+ 	unsel = t->data;
+ 	sel = t->data;
+ 	sel += t->total - 1;
+ 	while (sel > unsel) {
+ 		while (unsel->flag & TD_SELECTED) {
+ 			unsel++;
++			count++;
+ 			if (unsel == sel) {
+ 				return;
+ 			}
+@@ -2085,6 +2087,7 @@
+ {
+ 	BLI_assert(BM_elem_flag_test(eve, BM_ELEM_HIDDEN) == 0);
+ 
++	td->elem = (BMElem *)eve;
+ 	td->flag = 0;
+ 	//if (key)
+ 	//	td->loc = key->co;
+@@ -2161,7 +2164,7 @@
+ 	struct TransIslandData *island_info = NULL;
+ 	int island_info_tot;
+ 	int *island_vert_map = NULL;
+-
++	
+ 	if (t->flag & T_MIRROR) {
+ 		EDBM_verts_mirror_cache_begin(em, 0, false, (t->flag & T_PROP_EDIT) == 0, use_topology);
+ 		mirror = 1;
+@@ -2514,7 +2517,8 @@
+ 
+ /* ********************* UV ****************** */
+ 
+-static void UVsToTransData(SpaceImage *sima, TransData *td, TransData2D *td2d, float *uv, int selected)
++static void UVsToTransData(SpaceImage *sima, TransData *td, TransData2D *td2d, 
++                           BMLoop *loop, float *uv, int selected)
+ {
+ 	float aspx, aspy;
+ 
+@@ -2529,6 +2533,7 @@
+ 	td2d->loc[2] = 0.0f;
+ 	td2d->loc2d = uv;
+ 
++	td->elem = (BMElem *)loop;
+ 	td->flag = 0;
+ 	td->loc = td2d->loc;
+ 	copy_v3_v3(td->center, td->loc);
+@@ -2644,7 +2649,7 @@
+ 			}
+ 			
+ 			luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
+-			UVsToTransData(sima, td++, td2d++, luv->uv, uvedit_uv_select_test(scene, l, cd_loop_uv_offset));
++			UVsToTransData(sima, td++, td2d++, l, luv->uv, uvedit_uv_select_test(scene, l, cd_loop_uv_offset));
+ 		}
+ 	}
+ 
+@@ -6938,7 +6943,7 @@
+ 
+ 		t->flag |= T_EDIT | T_POINTS;
+ 
+-		if (t->data && t->flag & T_PROP_EDIT) {
++		if (t->data && t->flag & T_PROP_EDIT_ALL) {
+ 			if (ELEM(t->obedit->type, OB_CURVE, OB_MESH)) {
+ 				sort_trans_data(t); // makes selected become first in array
+ 				set_prop_dist(t, 0);

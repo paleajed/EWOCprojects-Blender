@@ -634,6 +634,7 @@ class IMAGE_PT_view_properties(Panel):
         show_uvedit = sima.show_uvedit
         show_maskedit = sima.show_maskedit
         uvedit = sima.uv_editor
+        toolsettings = context.tool_settings
 
         split = layout.split()
 
@@ -674,6 +675,9 @@ class IMAGE_PT_view_properties(Panel):
             sub = col.column()
             sub.active = uvedit.show_stretch
             sub.row().prop(uvedit, "draw_stretch_type", expand=True)
+            
+            layout.prop(toolsettings, "use_presel", text="Preselection")
+            layout.prop(toolsettings, "use_prop_presel", text="Prop Presel")
 
 
 class IMAGE_PT_paint(Panel, ImagePaintPanel):

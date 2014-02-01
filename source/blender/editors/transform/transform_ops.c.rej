@@ -1,0 +1,168 @@
+--- source/blender/editors/transform/transform_ops.c	(revision 60799)
++++ source/blender/editors/transform/transform_ops.c	(working copy)
+@@ -374,7 +374,7 @@
+ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
+ {
+ 	int exit_code;
+-
++	
+ 	TransInfo *t = op->customdata;
+ 	const enum TfmMode mode_prev = t->mode;
+ 
+@@ -440,7 +440,7 @@
+ static int transform_exec(bContext *C, wmOperator *op)
+ {
+ 	TransInfo *t;
+-
++	
+ 	if (!transformops_data(C, op, NULL)) {
+ 		G.moving = 0;
+ 		return OPERATOR_CANCELLED;
+@@ -449,7 +449,7 @@
+ 	t = op->customdata;
+ 
+ 	t->options |= CTX_AUTOCONFIRM;
+-
++	
+ 	transformApply(C, t);
+ 
+ 	transformEnd(C, t);
+@@ -480,6 +480,26 @@
+ 	}
+ }
+ 
++
++static void propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
++{
++	ToolSettings *ts = CTX_data_scene(C)->toolsettings;
++	bool smaller = RNA_int_get(op->ptr, "smaller");
++	
++	if (ts->use_prop_presel) {
++		if (smaller) {
++			ts->proportional_size *= 0.9f;
++			if (ts->proportional_size < 0.1)
++				ts->proportional_size = 0.1;
++		}
++		else
++			ts->proportional_size *= 1.1f;
++	}
++
++	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);	/* trigger presel calc */
++}
++
++
+ void Transform_Properties(struct wmOperatorType *ot, int flags)
+ {
+ 	PropertyRNA *prop;
+@@ -568,6 +588,7 @@
+ 	ot->poll   = ED_operator_screenactive;
+ 
+ 	RNA_def_float_vector_xyz(ot->srna, "value", 3, NULL, -FLT_MAX, FLT_MAX, "Vector", "", -FLT_MAX, FLT_MAX);
++	RNA_def_boolean(ot->srna, "extruding", false, "Extruding", "");
+ 
+ 	Transform_Properties(ot, P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP | P_OPTIONS);
+ }
+@@ -773,6 +794,7 @@
+ 	ot->poll   = ED_operator_editmesh;
+ 
+ 	RNA_def_float(ot->srna, "value", 0, -FLT_MAX, FLT_MAX, "Offset", "", -FLT_MAX, FLT_MAX);
++	RNA_def_boolean(ot->srna, "extruding", false, "Extruding", "");
+ 
+ 	Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP);
+ }
+@@ -941,6 +963,20 @@
+ 	Transform_Properties(ot, P_AXIS | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP);
+ }
+ 
++static void TRANSFORM_OT_prop_size(struct wmOperatorType *ot)
++{
++	/* identifiers */
++	ot->name   = "PropSize";
++	ot->description = "Change proportional edit size";
++	ot->idname = "TRANSFORM_OT_prop_size";
++
++	/* api callbacks */
++	ot->invoke = propsize_invoke;
++	ot->poll   = ED_operator_editmesh;
++
++	RNA_def_boolean(ot->srna, "smaller", true, "Smaller?", "Dialing size up or down");
++}
++
+ void transform_operatortypes(void)
+ {
+ 	TransformModeItem *tmode;
+@@ -954,6 +990,8 @@
+ 	WM_operatortype_append(TRANSFORM_OT_select_orientation);
+ 	WM_operatortype_append(TRANSFORM_OT_create_orientation);
+ 	WM_operatortype_append(TRANSFORM_OT_delete_orientation);
++	
++	WM_operatortype_append(TRANSFORM_OT_prop_size);
+ }
+ 
+ void transform_keymap_for_space(wmKeyConfig *keyconf, wmKeyMap *keymap, int spaceid)
+@@ -1012,7 +1050,12 @@
+ 
+ 			WM_keymap_add_item(keymap, OP_SKIN_RESIZE, AKEY, KM_PRESS, KM_CTRL, 0);
+ 
++			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_ALT, 0);
++			RNA_boolean_set(kmi->ptr, "smaller", TRUE);
++			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_ALT, 0);
++			RNA_boolean_set(kmi->ptr, "smaller", FALSE);
+ 			break;
++			
+ 		case SPACE_ACTION:
+ 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_transform", GKEY, KM_PRESS, 0, 0);
+ 			RNA_enum_set(kmi->ptr, "mode", TFM_TIME_TRANSLATE);
+@@ -1029,6 +1072,7 @@
+ 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_transform", TKEY, KM_PRESS, KM_SHIFT, 0);
+ 			RNA_enum_set(kmi->ptr, "mode", TFM_TIME_SLIDE);
+ 			break;
++			
+ 		case SPACE_IPO:
+ 			WM_keymap_add_item(keymap, OP_TRANSLATION, GKEY, KM_PRESS, 0, 0);
+ 			
+@@ -1041,6 +1085,7 @@
+ 			
+ 			WM_keymap_add_item(keymap, OP_RESIZE, SKEY, KM_PRESS, 0, 0);
+ 			break;
++			
+ 		case SPACE_NLA:
+ 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_transform", GKEY, KM_PRESS, 0, 0);
+ 			RNA_enum_set(kmi->ptr, "mode", TFM_TRANSLATION);
+@@ -1054,6 +1099,7 @@
+ 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_transform", SKEY, KM_PRESS, 0, 0);
+ 			RNA_enum_set(kmi->ptr, "mode", TFM_TIME_SCALE);
+ 			break;
++			
+ 		case SPACE_NODE:
+ 			WM_keymap_add_item(keymap, "NODE_OT_translate_attach", GKEY, KM_PRESS, 0, 0);
+ 			WM_keymap_add_item(keymap, "NODE_OT_translate_attach", EVT_TWEAK_A, KM_ANY, 0, 0);
+@@ -1081,6 +1127,7 @@
+ 			/* dettach and translate */
+ 			WM_keymap_add_item(keymap, "NODE_OT_detach_translate_attach", FKEY, KM_PRESS, KM_ALT, 0);
+ 			break;
++			
+ 		case SPACE_SEQ:
+ 			WM_keymap_add_item(keymap, OP_SEQ_SLIDE, GKEY, KM_PRESS, 0, 0);
+ 
+@@ -1089,6 +1136,7 @@
+ 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_transform", EKEY, KM_PRESS, 0, 0);
+ 			RNA_enum_set(kmi->ptr, "mode", TFM_TIME_EXTEND);
+ 			break;
++			
+ 		case SPACE_IMAGE:
+ 			WM_keymap_add_item(keymap, OP_TRANSLATION, GKEY, KM_PRESS, 0, 0);
+ 
+@@ -1107,7 +1155,12 @@
+ 
+ 			kmi = WM_keymap_add_item(keymap, "WM_OT_context_menu_enum", TABKEY, KM_PRESS, KM_SHIFT | KM_CTRL, 0);
+ 			RNA_string_set(kmi->ptr, "data_path", "tool_settings.snap_uv_element");
++			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_OSKEY, 0);
++			RNA_boolean_set(kmi->ptr, "smaller", TRUE);
++			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_OSKEY, 0);
++			RNA_boolean_set(kmi->ptr, "smaller", FALSE);
+ 			break;
++			
+ 		case SPACE_CLIP:
+ 			WM_keymap_add_item(keymap, OP_TRANSLATION, GKEY, KM_PRESS, 0, 0);
+ 			WM_keymap_add_item(keymap, OP_TRANSLATION, EVT_TWEAK_S, KM_ANY, 0, 0);

@@ -37,6 +37,8 @@ incs = [
     '#/intern/memutil',
     '#/source/gameengine/BlenderRoutines',
     '#/extern/glew/include',
+	'../bmesh',
+	'../editors/space_view3d',
     '../blenfont',
     '../blenkernel',
     '../blenlib',

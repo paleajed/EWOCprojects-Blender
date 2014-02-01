@@ -2895,6 +2895,7 @@ class VIEW3D_PT_view3d_meshdisplay(Panel):
 
         mesh = context.active_object.data
         scene = context.scene
+        toolsettings = context.tool_settings
 
         split = layout.split()
 
@@ -2907,6 +2908,9 @@ class VIEW3D_PT_view3d_meshdisplay(Panel):
             col.prop(mesh, "show_edge_seams", text="Seams")
 
         layout.prop(mesh, "show_weight")
+        
+        layout.prop(toolsettings, "use_presel", text="Preselection")
+        layout.prop(toolsettings, "use_prop_presel", text="Prop Presel")
 
         col = split.column()
         col.label()
@@ -2922,14 +2926,16 @@ class VIEW3D_PT_view3d_meshdisplay(Panel):
 
         col.separator()
         col.label(text="Normals:")
-        row = col.row()
+        row = col.split(percentage=0.4)
 
         sub = row.row(align=True)
         sub.prop(mesh, "show_normal_vertex", text="", icon='VERTEXSEL')
         sub.prop(mesh, "show_normal_face", text="", icon='FACESEL')
+        if toolsettings.use_presel:
+        	sub.prop(context.scene.tool_settings, "show_presel_normals", text="", icon='PRESEL')
 
         sub = row.row(align=True)
-        sub.active = mesh.show_normal_vertex or mesh.show_normal_face
+        sub.active = mesh.show_normal_vertex or mesh.show_normal_face or (toolsettings.use_presel and context.scene.tool_settings.show_presel_normals)
         sub.prop(context.scene.tool_settings, "normal_size", text="Size")
 
         col.separator()

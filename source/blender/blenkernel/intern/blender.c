@@ -94,6 +94,7 @@
 #include "RNA_access.h"
 
 #include "WM_api.h" // XXXXX BAD, very BAD dependency (bad level call) - remove asap, elubie
+#include "WM_types.h"  // Is this bad too ?  ;)
 
 #include "IMB_colormanagement.h"
 
@@ -351,6 +352,15 @@ static void setup_app_data(bContext *C, BlendFileData *bfd, const char *filepath
 	}
 	BKE_scene_set_background(G.main, CTX_data_scene(C));
 
+	/* reset gesture_levels, should this have been saved - is there a better way of doing this? */
+	if (!mode){
+		wmWindowManager *wm = G.main->wm.first;
+		wmWindow *win;
+		for (win = wm->windows.first; win; win = win->next) {
+			win->gesture_level = WM_GESTURE_NONE;
+		}
+	}
+	
 	if (mode != 'u') {
 		IMB_colormanagement_check_file_config(G.main);
 	}

@@ -895,7 +895,9 @@ typedef struct TransformOrientation {
 	struct TransformOrientation *next, *prev;
 	char name[64];	/* MAX_NAME */
 	float mat[3][3];
-	int pad;
+	float loc[3];
+	char useloc;
+	char pad[7];
 } TransformOrientation;
 
 /* *************************************************************** */
@@ -1002,6 +1004,10 @@ typedef struct ToolSettings {
 
 	float doublimit;	/* remove doubles limit */
 	float normalsize;	/* size of normals */
+	char  show_presel_normals;	/* show normal on preselected face, extend to vertices when normal editing gets in */
+	char  use_presel;	/* turn on/off preselection */
+	char  use_prop_presel;	/* turn on/off proportional preselection */
+	char  pad2[5];
 	short automerge;
 
 	/* Selection Mode for Mesh */
@@ -1014,7 +1020,7 @@ typedef struct ToolSettings {
 	char uv_selectmode;
 
 	float uvcalc_margin;
-
+	
 	/* Auto-IK */
 	short autoik_chainlen;  /* runtime only */
 
@@ -1031,6 +1037,7 @@ typedef struct ToolSettings {
 	
 	/* Transform Proportional Area of Effect */
 	float proportional_size;
+	float old_proportional_size;	/* for realtime preselection update */
 
 	/* Select Group Threshold */
 	float select_thresh;
@@ -1040,7 +1047,7 @@ typedef struct ToolSettings {
 
 	/* Multires */
 	char multires_subdiv_type;
-	char pad3[1];
+	char pad3[5];
 
 	/* Skeleton generation */
 	short skgen_resolution;
@@ -1103,6 +1110,7 @@ typedef struct ToolSettings {
 	struct UnifiedPaintSettings unified_paint_settings;
 
 	struct MeshStatVis statvis;
+	
 } ToolSettings;
 
 /* *************************************************************** */

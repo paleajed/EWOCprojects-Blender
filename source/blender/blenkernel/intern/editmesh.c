@@ -78,6 +78,13 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em)
 	 * used.*/
 	em_copy->looptris = NULL;
 
+	em_copy->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+	em_copy->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+	em_copy->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+
+	em_copy->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+	em_copy->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+
 	return em_copy;
 }
 
@@ -207,6 +214,14 @@ void BKE_editmesh_free(BMEditMesh *em)
 
 	if (em->looptris) MEM_freeN(em->looptris);
 
+	/* free preselection item lists */
+	if (em->presel_verts) BLI_ghash_free(em->presel_verts, NULL, NULL);
+	if (em->presel_edges) BLI_ghash_free(em->presel_edges, NULL, NULL);
+	if (em->presel_faces) BLI_ghash_free(em->presel_faces, NULL, NULL);
+	
+	if (em->prop3d_faces) BLI_ghash_free(em->prop3d_faces, NULL, NULL);
+	if (em->prop2d_faces) BLI_ghash_free(em->prop2d_faces, NULL, NULL);
+	
 	if (em->bm)
 		BM_mesh_free(em->bm);
 }

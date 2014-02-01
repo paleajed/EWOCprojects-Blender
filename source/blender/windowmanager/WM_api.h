@@ -320,6 +320,8 @@ void		WM_gesture_straightline_cancel(struct bContext *C, struct wmOperator *op);
 struct wmGesture *WM_gesture_new(struct bContext *C, const struct wmEvent *event, int type);
 void		WM_gesture_end(struct bContext *C, struct wmGesture *gesture);
 void		WM_gestures_remove(struct bContext *C);
+void		WM_gestures_update_level(struct wmWindow *win);
+void 		WM_gestures_reset_level(struct wmWindow *win);
 
 			/* fileselecting support */
 void		WM_event_add_fileselect(struct bContext *C, struct wmOperator *op);

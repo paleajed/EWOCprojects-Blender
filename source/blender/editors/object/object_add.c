@@ -734,8 +734,7 @@ static int object_empty_add_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 
 	ob = ED_object_add_type(C, OB_EMPTY, loc, rot, FALSE, layer);
-
-	BKE_object_empty_draw_type_set(ob, type);
+	ob->empty_drawtype = type;
 
 	return OPERATOR_FINISHED;
 }

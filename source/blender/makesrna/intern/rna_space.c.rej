@@ -1,0 +1,32 @@
+***************
+*** 105,110 ****
+  	                   "Align the transformation axes to average normal of selected elements "
+  	                   "(bone Y axis for pose mode)"},
+  	{V3D_MANIP_VIEW, "VIEW", 0, "View", "Align the transformation axes to the window"},
+  	{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
+  	{0, NULL, 0, NULL, NULL}
+  };
+--- 105,111 ----
+  	                   "Align the transformation axes to average normal of selected elements "
+  	                   "(bone Y axis for pose mode)"},
+  	{V3D_MANIP_VIEW, "VIEW", 0, "View", "Align the transformation axes to the window"},
++ 	{V3D_MANIP_FREE, "FREE", 0, "Free", "Uses manipulator for transform thats set with set_manipulator button"},
+  	{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
+  	{0, NULL, 0, NULL, NULL}
+  };
+***************
+*** 313,318 ****
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_NORMAL);
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_GIMBAL);
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_VIEW);
+  
+  	if (ptr->type == &RNA_SpaceView3D)
+  		scene = ((bScreen *)ptr->id.data)->scene;
+--- 314,320 ----
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_NORMAL);
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_GIMBAL);
+  	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_VIEW);
++ 	RNA_enum_items_add_value(&item, &totitem, transform_orientation_items, V3D_MANIP_FREE);
+  
+  	if (ptr->type == &RNA_SpaceView3D)
+  		scene = ((bScreen *)ptr->id.data)->scene;

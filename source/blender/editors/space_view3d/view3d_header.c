@@ -356,7 +356,7 @@ void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
 			/* masks aren't used for sculpt and particle painting */
 			PointerRNA meshptr;
 
-			RNA_pointer_create(ob->data, &RNA_Mesh, ob->data, &meshptr);
+			RNA_pointer_create(&ob->id, &RNA_Mesh, ob->data, &meshptr);
 			if (ob->mode & (OB_MODE_TEXTURE_PAINT | OB_MODE_VERTEX_PAINT)) {
 				uiItemR(layout, &meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 			}
@@ -369,7 +369,18 @@ void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
 	}
 	else {
 		row = uiLayoutRow(layout, TRUE);
-		uiItemR(row, &v3dptr, "pivot_point", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+		if (v3d->twflag & (V3D_SET_MANIPULATOR | V3D_FREE_MANIPULATOR)) {
+			if (!(v3d->around == V3D_FREE)) {
+				v3d->oldaround = v3d->around;
+			}
+			uiItemR(row, &v3dptr, "pivot_free", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+		}
+		else {
+			if (v3d->around == V3D_FREE) {
+				v3d->around = v3d->oldaround;
+			}
+			uiItemR(row, &v3dptr, "pivot_point", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+		}
 
 		/* pose/object only however we want to allow in weight paint mode too
 		 * so don't be totally strict and just check not-editmode for now 
@@ -386,6 +397,8 @@ void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
 			uiItemR(row, &v3dptr, "transform_manipulators", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 		}
 		uiItemR(row, &v3dptr, "transform_orientation", 0, "", ICON_NONE);
+//		if (v3d->twmode == V3D_MANIP_FREE)		//possible interface solution
+		uiItemR(row, &v3dptr, "set_manipulator", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 	}
 
 	if (obedit == NULL && v3d->localvd == NULL) {

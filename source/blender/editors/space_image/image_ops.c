@@ -87,6 +87,8 @@
 
 #include "PIL_time.h"
 
+#include "wm_event_system.h"
+
 #include "image_intern.h"
 #include "ED_sculpt.h"
 
@@ -387,6 +389,24 @@ typedef struct ViewZoomData {
 	ARegion *ar;
 } ViewZoomData;
 
+static void set_circle_select_zfac(bContext *C, float zfac)
+{
+	wmWindow *win = CTX_wm_window(C);
+	wmEventHandler *eh;
+	
+	if (U.flag & USER_GROW_CIRCLESELECT) {
+		for (eh = win->modalhandlers.first; eh; eh = eh->next) {
+			if (eh->op) {
+				if (strcmp(eh->op->idname, "UV_OT_circle_select") == 0) {
+					wmGesture *gesture = eh->op->customdata;
+					rctf *rect = gesture->customdata;
+					rect->xmax *= zfac;
+				}
+			}
+		}
+	}
+}
+
 static void image_view_zoom_init(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	SpaceImage *sima = CTX_wm_space_image(C);
@@ -476,6 +496,8 @@ static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 		factor = 1.0f + delta / 300.0f;
 		RNA_float_set(op->ptr, "factor", factor);
 		sima_zoom_set(sima, ar, sima->zoom * factor, location);
+		set_circle_select_zfac(C, factor);
+
 		ED_region_tag_redraw(CTX_wm_region(C));
 		
 		return OPERATOR_FINISHED;
@@ -486,9 +508,10 @@ static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 	}
 }
 
-static void image_zoom_apply(ViewZoomData *vpd, wmOperator *op, const int x, const int y, const short viewzoom, const short zoom_invert)
+static float image_zoom_apply(ViewZoomData *vpd, wmOperator *op, const int x, const int y, const short viewzoom, const short zoom_invert)
 {
 	float factor;
+	float zfac;
 
 	if (viewzoom == USER_ZOOM_CONT) {
 		double time = PIL_check_seconds_timer();
@@ -525,14 +548,18 @@ static void image_zoom_apply(ViewZoomData *vpd, wmOperator *op, const int x, con
 	}
 
 	RNA_float_set(op->ptr, "factor", factor);
+	zfac = (vpd->zoom * factor) / vpd->sima->zoom;
 	sima_zoom_set(vpd->sima, vpd->ar, vpd->zoom * factor, vpd->location);
 	ED_region_tag_redraw(vpd->ar);
+	
+	return zfac;
 }
 
 static int image_view_zoom_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewZoomData *vpd = op->customdata;
 	short event_code = VIEW_PASS;
+	float zfac = 1.0f;
 
 	/* execute the events */
 	if (event->type == TIMER && event->customdata == vpd->timer) {
@@ -547,7 +574,9 @@ static int image_view_zoom_modal(bContext *C, wmOperator *op, const wmEvent *eve
 	}
 
 	if (event_code == VIEW_APPLY) {
-		image_zoom_apply(vpd, op, event->x, event->y, U.viewzoom, (U.uiflag & USER_ZOOM_INVERT) != 0);
+		zfac = image_zoom_apply(vpd, op, event->x, event->y, U.viewzoom, (U.uiflag & USER_ZOOM_INVERT) != 0);
+		printf("fac %f\n");
+		set_circle_select_zfac(C, zfac);
 	}
 	else if (event_code == VIEW_CONFIRM) {
 		image_view_zoom_exit(C, op, false);
@@ -789,6 +818,8 @@ static int image_view_zoom_in_exec(bContext *C, wmOperator *op)
 
 	sima_zoom_set_factor(sima, ar, 1.25f, location);
 
+	set_circle_select_zfac(C, 1.25f);
+
 	ED_region_tag_redraw(CTX_wm_region(C));
 	
 	return OPERATOR_FINISHED;
@@ -830,6 +861,8 @@ static int image_view_zoom_out_exec(bContext *C, wmOperator *op)
 	RNA_float_get_array(op->ptr, "location", location);
 
 	sima_zoom_set_factor(sima, ar, 0.8f, location);
+
+	set_circle_select_zfac(C, 0.8f);
 
 	ED_region_tag_redraw(CTX_wm_region(C));
 	

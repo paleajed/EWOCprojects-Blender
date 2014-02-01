@@ -38,7 +38,9 @@ extern "C" {
 struct ID;
 struct View3D;
 struct ARegion;
+struct ScrArea;
 struct bContext;
+struct bScreen;
 struct wmOperator;
 struct wmWindowManager;
 struct wmKeyConfig;
@@ -155,8 +157,12 @@ struct BMFace *EDBM_face_find_nearest(struct ViewContext *vc, float *r_dist);
 
 bool EDBM_select_pick(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
 
+bool EDBM_presel_pick(struct bContext *C, const int mval[2]);
+
 void EDBM_selectmode_set(struct BMEditMesh *em);
 void EDBM_selectmode_convert(struct BMEditMesh *em, const short selectmode_old, const short selectmode_new);
+
+void EDBM_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force);
 
 /* user access this */
 bool EDBM_selectmode_toggle(struct bContext *C, const short selectmode_new,

@@ -379,6 +379,8 @@ void ED_object_editmode_exit(bContext *C, int flag)
 	Scene *scene = CTX_data_scene(C);
 	Object *obedit = CTX_data_edit_object(C);
 	const bool freedata = (flag & EM_FREEDATA) != 0;
+	
+	if (!obedit) return;
 
 	if (flag & EM_WAITCURSOR) waitcursor(1);
 
@@ -391,7 +393,7 @@ void ED_object_editmode_exit(bContext *C, int flag)
 		if (flag & EM_WAITCURSOR) waitcursor(0);
 		return;
 	}
-
+	
 	/* freedata only 0 now on file saves and render */
 	if (freedata) {
 		ListBase pidlist;
@@ -487,10 +489,20 @@ void ED_object_editmode_enter(bContext *C, int flag)
 			EDBM_mesh_normals_update(em);
 			BKE_editmesh_tessface_calc(em);
 
+			/* initialize preselection item lists */
+			em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+
 			BM_mesh_select_mode_flush(em->bm);
 		}
+		WM_operator_name_call(C, "VIEW3D_OT_preselect", WM_OP_INVOKE_DEFAULT, NULL);
 
 		WM_event_add_notifier(C, NC_SCENE | ND_MODE | NS_EDITMODE_MESH, scene);
+		WM_event_add_notifier(C, NC_GEOM | ND_DATA | NA_ADDED, NULL);
 	}
 	else if (ob->type == OB_ARMATURE) {
 		bArmature *arm = ob->data;

@@ -27,6 +27,7 @@
  *  \ingroup bke
  */
 
+#include "DNA_customdata_types.h"
 #include "BKE_customdata.h"
 #include "bmesh.h"
 
@@ -80,6 +81,15 @@ typedef struct BMEditMesh {
 
 	/*temp variables for x-mirror editing*/
 	int mirror_cdlayer; /* -1 is invalid */
+	
+	/* preselecton item lists */
+	struct GHash *presel_verts;
+	struct GHash *presel_edges;
+ 	struct GHash *presel_faces;
+ 	
+ 	struct GHash *prop3d_faces;
+ 	struct GHash *prop2d_faces;
+ 	
 } BMEditMesh;
 
 /* editmesh.c */

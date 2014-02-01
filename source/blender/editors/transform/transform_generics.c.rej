@@ -1,0 +1,69 @@
+--- source/blender/editors/transform/transform_generics.c	(revision 60799)
++++ source/blender/editors/transform/transform_generics.c	(working copy)
+@@ -1129,15 +1129,25 @@
+ 
+ 
+ 	if (t->spacetype == SPACE_VIEW3D) {
++		bool extruding = false;
+ 		View3D *v3d = sa->spacedata.first;
+ 		bScreen *animscreen = ED_screen_animation_playing(CTX_wm_manager(C));
+ 		
+ 		t->view = v3d;
+ 		t->animtimer = (animscreen) ? animscreen->animtimer : NULL;
+ 		
+-		/* turn manipulator off during transform */
++		if (op && (prop = RNA_struct_find_property(op->ptr, "extruding"))) {
++			extruding = RNA_property_boolean_get(op->ptr, prop);
++		}
++		if ((v3d->twflag & V3D_SET_MANIPULATOR) && !extruding) {
++			t->flag |= T_MANIP_SET;
++		}
++		if (v3d->twflag & V3D_FREE_MANIPULATOR) {
++			t->flag |= T_MANIP_FREE;
++		}
++		/* turn manipulator off during transform if not setting manipulator */
+ 		// FIXME: but don't do this when USING the manipulator...
+-		if (t->flag & T_MODAL) {
++		if ((t->flag & T_MODAL) && (!(t->flag & T_MANIP_SET))) {
+ 			t->twtype = v3d->twtype;
+ 			v3d->twtype = 0;
+ 		}
+@@ -1264,7 +1274,7 @@
+ 	}
+ 	
+ 	/* setting PET flag only if property exist in operator. Otherwise, assume it's not supported */
+-	if (op && (prop = RNA_struct_find_property(op->ptr, "proportional"))) {
++	if (!(t->flag & T_MANIP_SET) && op && (prop = RNA_struct_find_property(op->ptr, "proportional"))) {
+ 		if (RNA_property_is_set(op->ptr, prop)) {
+ 			t->flag |= initTransInfo_edit_pet_to_flag(RNA_property_enum_get(op->ptr, prop));
+ 		}
+@@ -1395,7 +1405,7 @@
+ 	else if (t->spacetype == SPACE_VIEW3D) {
+ 		View3D *v3d = t->sa->spacedata.first;
+ 		/* restore manipulator */
+-		if (t->flag & T_MODAL) {
++		if ((t->flag & T_MODAL) && (!(t->flag & T_MANIP_SET))) {
+ 			v3d->twtype = t->twtype;
+ 		}
+ 	}
+@@ -1701,6 +1711,20 @@
+ 			}
+ 			break;
+ 		}
++		case V3D_FREE:
++			copy_v3_v3(t->center, t->manip_rootmat[3]);
++			/* If edit or pose mode, move center in local space */
++			if (t->flag & (T_EDIT | T_POSE)) {
++				Object *ob = t->obedit ? t->obedit : t->poseobj;
++				float mat[3][3], imat[3][3];
++				
++				sub_v3_v3v3(t->center, t->center, ob->obmat[3]);
++				copy_m3_m4(mat, ob->obmat);
++				invert_m3_m3(imat, mat);
++				mul_m3_v3(imat, t->center);
++			}
++			calculateCenter2D(t);
++			break;
+ 	}
+ 	
+ 	/* setting constraint center */

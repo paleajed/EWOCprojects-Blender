@@ -42,6 +42,9 @@
 #include "BKE_editmesh.h"
 #include "BKE_report.h"
 
+#include "WM_api.h"
+#include "WM_types.h"
+
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_uvedit.h"
@@ -81,7 +84,7 @@ static void verttag_set_cb(BMVert *v, bool val, void *user_data_v)
 	BM_vert_select_set(user_data->bm, v, val);
 }
 
-static bool mouse_mesh_shortest_path_vert(ViewContext *vc)
+static bool mouse_mesh_shortest_path_vert(ViewContext *vc, bool presel)
 {
 	/* unlike edge/face versions, this uses a bmesh operator */
 
@@ -101,7 +104,7 @@ static bool mouse_mesh_shortest_path_vert(ViewContext *vc)
 			if ((path = BM_mesh_calc_path_vert(bm, v_act, v_dst, use_length,
 			                                   &user_data, verttag_filter_cb)))
 			{
-				BM_select_history_remove(bm, v_act);
+				if (!presel) BM_select_history_remove(bm, v_act);
 			}
 		}
 
@@ -120,25 +123,32 @@ static bool mouse_mesh_shortest_path_vert(ViewContext *vc)
 
 			node = path;
 			do {
-				verttag_set_cb((BMVert *)node->link, !all_set, &user_data);
+				if (presel) {
+					BLI_ghash_insert(em->presel_verts, (BMVert *)node->link, NULL);
+				}
+				else {
+					verttag_set_cb((BMVert *)node->link, !all_set, &user_data);
+				}
 			} while ((node = node->next));
 
 			BLI_linklist_free(path, NULL);
 		}
-		else {
+		else if (!presel){
 			const bool is_act = !verttag_test_cb(v_dst, &user_data);
 			verttag_set_cb(v_dst, is_act, &user_data); /* switch the face option */
 		}
 
-		EDBM_selectmode_flush(em);
-
-		/* even if this is selected it may not be in the selection list */
-		if (BM_elem_flag_test(v_dst, BM_ELEM_SELECT) == 0)
-			BM_select_history_remove(bm, v_dst);
-		else
-			BM_select_history_store(bm, v_dst);
-
-		EDBM_update_generic(em, false, false);
+		if (!presel) {
+			EDBM_selectmode_flush(em);
+	
+			/* even if this is selected it may not be in the selection list */
+			if (BM_elem_flag_test(v_dst, BM_ELEM_SELECT) == 0)
+				BM_select_history_remove(bm, v_dst);
+			else
+				BM_select_history_store(bm, v_dst);
+	
+			EDBM_update_generic(em, false, false);
+		}
 
 		return true;
 	}
@@ -248,7 +258,7 @@ static void edgetag_ensure_cd_flag(Scene *scene, Mesh *me)
 /* mesh shortest path select, uses prev-selected edge */
 
 /* since you want to create paths with multiple selects, it doesn't have extend option */
-static bool mouse_mesh_shortest_path_edge(ViewContext *vc)
+static bool mouse_mesh_shortest_path_edge(ViewContext *vc, bool presel)
 {
 	BMEditMesh *em = vc->em;
 	BMesh *bm = em->bm;
@@ -270,7 +280,7 @@ static bool mouse_mesh_shortest_path_edge(ViewContext *vc)
 			if ((path = BM_mesh_calc_path_edge(bm, e_act, e_dst, use_length,
 			                                   &user_data, edgetag_filter_cb)))
 			{
-				BM_select_history_remove(bm, e_act);
+				if (!presel) BM_select_history_remove(bm, e_act);
 			}
 		}
 
@@ -289,12 +299,17 @@ static bool mouse_mesh_shortest_path_edge(ViewContext *vc)
 
 			node = path;
 			do {
-				edgetag_set_cb((BMEdge *)node->link, !all_set, &user_data);
+				if (presel) {
+					BLI_ghash_insert(em->presel_edges, (BMEdge *)node->link, NULL);
+				}
+				else {
+					edgetag_set_cb((BMEdge *)node->link, !all_set, &user_data);
+				}
 			} while ((node = node->next));
 
 			BLI_linklist_free(path, NULL);
 		}
-		else {
+		else if (!presel) {
 			const bool is_act = !edgetag_test_cb(e_dst, &user_data);
 			edgetag_ensure_cd_flag(vc->scene, vc->obedit->data);
 			edgetag_set_cb(e_dst, is_act, &user_data); /* switch the edge option */
@@ -308,40 +323,42 @@ static bool mouse_mesh_shortest_path_edge(ViewContext *vc)
 			BM_select_history_store(bm, e_dst);
 		}
 
-		EDBM_selectmode_flush(em);
-
-		/* even if this is selected it may not be in the selection list */
-		if (edge_mode == EDGE_MODE_SELECT) {
-			if (edgetag_test_cb(e_dst, &user_data) == 0)
-				BM_select_history_remove(bm, e_dst);
-			else
-				BM_select_history_store(bm, e_dst);
-		}
-
-		/* force drawmode for mesh */
-		switch (edge_mode) {
-
-			case EDGE_MODE_TAG_SEAM:
-				me->drawflag |= ME_DRAWSEAMS;
-				ED_uvedit_live_unwrap(vc->scene, vc->obedit);
-				break;
-			case EDGE_MODE_TAG_SHARP:
-				me->drawflag |= ME_DRAWSHARP;
-				break;
-			case EDGE_MODE_TAG_CREASE:
-				me->drawflag |= ME_DRAWCREASES;
-				break;
-			case EDGE_MODE_TAG_BEVEL:
-				me->drawflag |= ME_DRAWBWEIGHTS;
-				break;
+		if (!presel) {
+			EDBM_selectmode_flush(em);
+	
+			/* even if this is selected it may not be in the selection list */
+			if (edge_mode == EDGE_MODE_SELECT) {
+				if (edgetag_test_cb(e_dst, &user_data) == 0)
+					BM_select_history_remove(bm, e_dst);
+				else
+					BM_select_history_store(bm, e_dst);
+			}
+	
+			/* force drawmode for mesh */
+			switch (edge_mode) {
+	
+				case EDGE_MODE_TAG_SEAM:
+					me->drawflag |= ME_DRAWSEAMS;
+					ED_uvedit_live_unwrap(vc->scene, vc->obedit);
+					break;
+				case EDGE_MODE_TAG_SHARP:
+					me->drawflag |= ME_DRAWSHARP;
+					break;
+				case EDGE_MODE_TAG_CREASE:
+					me->drawflag |= ME_DRAWCREASES;
+					break;
+				case EDGE_MODE_TAG_BEVEL:
+					me->drawflag |= ME_DRAWBWEIGHTS;
+					break;
 #ifdef WITH_FREESTYLE
-			case EDGE_MODE_TAG_FREESTYLE:
-				me->drawflag |= ME_DRAW_FREESTYLE_EDGE;
-				break;
+				case EDGE_MODE_TAG_FREESTYLE:
+					me->drawflag |= ME_DRAW_FREESTYLE_EDGE;
+					break;
 #endif
+			}
+	
+			EDBM_update_generic(em, false, false);
 		}
-
-		EDBM_update_generic(em, false, false);
 
 		return true;
 	}
@@ -372,7 +389,7 @@ static void facetag_set_cb(BMFace *f, bool val, void *user_data_v)
 	BM_face_select_set(user_data->bm, f, val);
 }
 
-static bool mouse_mesh_shortest_path_face(ViewContext *vc)
+static bool mouse_mesh_shortest_path_face(ViewContext *vc, bool presel)
 {
 	BMEditMesh *em = vc->em;
 	BMesh *bm = em->bm;
@@ -391,7 +408,7 @@ static bool mouse_mesh_shortest_path_face(ViewContext *vc)
 				if ((path = BM_mesh_calc_path_face(bm, f_act, f_dst, use_length,
 				                                   &user_data, facetag_filter_cb)))
 				{
-					BM_select_history_remove(bm, f_act);
+					if (!presel) BM_select_history_remove(bm, f_act);
 				}
 			}
 		}
@@ -411,27 +428,34 @@ static bool mouse_mesh_shortest_path_face(ViewContext *vc)
 
 			node = path;
 			do {
-				facetag_set_cb((BMFace *)node->link, !all_set, &user_data);
+				if (presel) {
+					BLI_ghash_insert(em->presel_faces, (BMFace *)node->link, NULL);
+				}
+				else {
+					facetag_set_cb((BMFace *)node->link, !all_set, &user_data);
+				}
 			} while ((node = node->next));
 
 			BLI_linklist_free(path, NULL);
 		}
-		else {
+		else if (!presel) {
 			const bool is_act = !facetag_test_cb(f_dst, &user_data);
 			facetag_set_cb(f_dst, is_act, &user_data); /* switch the face option */
 		}
 
-		EDBM_selectmode_flush(em);
-
-		/* even if this is selected it may not be in the selection list */
-		if (facetag_test_cb(f_dst, &user_data) == 0)
-			BM_select_history_remove(bm, f_dst);
-		else
-			BM_select_history_store(bm, f_dst);
-
-		BM_mesh_active_face_set(bm, f_dst);
-
-		EDBM_update_generic(em, false, false);
+		if (!presel) {
+			EDBM_selectmode_flush(em);
+	
+			/* even if this is selected it may not be in the selection list */
+			if (facetag_test_cb(f_dst, &user_data) == 0)
+				BM_select_history_remove(bm, f_dst);
+			else
+				BM_select_history_store(bm, f_dst);
+	
+			BM_mesh_active_face_set(bm, f_dst);
+	
+			EDBM_update_generic(em, false, false);
+		}
 
 		return true;
 	}
@@ -445,10 +469,13 @@ static bool mouse_mesh_shortest_path_face(ViewContext *vc)
 /* -------------------------------------------------------------------- */
 /* Main Operator for vert/edge/face tag */
 
-static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
+static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewContext vc;
 	BMEditMesh *em;
+	bool presel = RNA_boolean_get(op->ptr, "presel");
+	Scene *scene = CTX_data_scene(C);
+	if (presel && !scene->toolsettings->use_presel) return OPERATOR_CANCELLED;
 
 	view3d_operator_needs_opengl(C);
 
@@ -457,7 +484,14 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *UNUSED(op), c
 	em = vc.em;
 
 	if (em->selectmode & SCE_SELECT_VERTEX) {
-		if (mouse_mesh_shortest_path_vert(&vc)) {
+		BLI_ghash_clear(em->presel_verts, NULL, NULL);
+		if (mouse_mesh_shortest_path_vert(&vc, presel)) {
+			if (presel) {
+				WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+			}
+			else {
+				WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);
+			}
 			return OPERATOR_FINISHED;
 		}
 		else {
@@ -465,7 +499,14 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *UNUSED(op), c
 		}
 	}
 	else if (em->selectmode & SCE_SELECT_EDGE) {
-		if (mouse_mesh_shortest_path_edge(&vc)) {
+		BLI_ghash_clear(em->presel_edges, NULL, NULL);
+		if (mouse_mesh_shortest_path_edge(&vc, presel)) {
+			if (presel) {
+				WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+			}
+			else {
+				WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);
+			}
 			return OPERATOR_FINISHED;
 		}
 		else {
@@ -473,7 +514,14 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *UNUSED(op), c
 		}
 	}
 	else if (em->selectmode & SCE_SELECT_FACE) {
-		if (mouse_mesh_shortest_path_face(&vc)) {
+		BLI_ghash_clear(em->presel_faces, NULL, NULL);
+		if (mouse_mesh_shortest_path_face(&vc, presel)) {
+			if (presel) {
+				WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+			}
+			else {
+				WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);
+			}
 			return OPERATOR_FINISHED;
 		}
 		else {
@@ -500,6 +548,26 @@ void MESH_OT_shortest_path_pick(wmOperatorType *ot)
 
 	/* properties */
 	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
+	RNA_def_boolean(ot->srna, "presel", false, "Preselection", "Preselect");
+}
+
+
+void MESH_OT_shortest_path_presel(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Preselect Shortest Path";
+	ot->idname = "MESH_OT_shortest_path_presel";
+	ot->description = "Preselect shortest path between two selections";
+
+	/* api callbacks */
+	ot->invoke = edbm_shortest_path_pick_invoke;
+	ot->poll = ED_operator_editmesh_region_view3d;
+
+	/* flags */
+
+	/* properties */
+	RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend the selection");
+	RNA_def_boolean(ot->srna, "presel", false, "Preselection", "Preselect");
 }
 
 

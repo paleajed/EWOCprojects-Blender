@@ -1384,7 +1384,7 @@ static void ui_panel_category_draw_tab(int mode, float minx, float miny, float m
 void UI_panel_category_draw_all(ARegion *ar, const char *category_id_active)
 {
 	/* no tab outlines for */
-// #define USE_FLAT_INACTIVE
+#define USE_FLAT_INACTIVE
 	View2D *v2d = &ar->v2d;
 	uiStyle *style = UI_GetStyle();
 	const uiFontStyle *fstyle = &style->widget;
@@ -1407,7 +1407,7 @@ void UI_panel_category_draw_all(ARegion *ar, const char *category_id_active)
 #endif
 	float scaletabs = 1.0f;
 	/* same for all tabs */
-	const int rct_xmin = v2d->mask.xmin + 3;  /* intentionally dont scale by 'px' */
+	const int rct_xmin = v2d->mask.xmin + (3 * px);
 	const int rct_xmax = v2d->mask.xmin + category_tabs_width;
 	const int text_v_ofs = (rct_xmax - rct_xmin) * 0.3f;
 
@@ -1431,8 +1431,9 @@ void UI_panel_category_draw_all(ARegion *ar, const char *category_id_active)
 	UI_GetThemeColor4ubv(TH_TEXT, theme_col_text);
 	UI_GetThemeColor4ubv(TH_TEXT_HI, theme_col_text_hi);
 
-	blend_color_interpolate_byte(theme_col_tab_bg, theme_col_back, theme_col_text, 0.2f);
-	blend_color_interpolate_byte(theme_col_tab_inactive, theme_col_back, theme_col_text, 0.10f);
+
+	blend_color_interpolate_byte(theme_col_tab_bg, theme_col_back, theme_col_text, 0.12f);
+	blend_color_interpolate_byte(theme_col_tab_inactive, theme_col_back, theme_col_text, 0.1f);
 	blend_color_interpolate_byte(theme_col_tab_outline, theme_col_back, theme_col_text, 0.3f);
 	blend_color_interpolate_byte(theme_col_tab_divider, theme_col_back, theme_col_text, 0.3f);
 
@@ -1447,7 +1448,7 @@ void UI_panel_category_draw_all(ARegion *ar, const char *category_id_active)
 	BLF_rotation(fontid, M_PI / 2);
 	//uiStyleFontSet(&style->widget);
 	ui_fontscale(&fstyle_points, aspect);
-	BLF_size(fontid, (fstyle_points * U.pixelsize * 1.1), U.dpi);
+	BLF_size(fontid, (fstyle_points * U.pixelsize), U.dpi);
 
 	BLI_assert(UI_panel_category_is_visible(ar));
 
@@ -1540,16 +1541,7 @@ void UI_panel_category_draw_all(ARegion *ar, const char *category_id_active)
 
 		BLF_position(fontid, rct->xmax - text_v_ofs, rct->ymin + tab_v_pad_text, 0.0f);
 
-		/* tab titles */
-
-		/* first draw shadow, in this case white */
 		glColor3ubv(theme_col_text);
-		/* draw white shadow to give text more depth */
-		BLF_enable(fontid, BLF_SHADOW);
-		BLF_shadow(fontid, 3, 1.0f, 1.0f, 1.0f, 0.25f);
-		BLF_shadow_offset(fontid, -1, -1);
-
-		/* main tab title */
 		BLF_draw(fontid, category_id_draw, category_draw_len);
 
 		glDisable(GL_BLEND);

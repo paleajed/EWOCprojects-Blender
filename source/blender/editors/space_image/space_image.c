@@ -420,7 +420,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
 	}
 }
 
-static void image_listener(bScreen *UNUSED(sc), ScrArea *sa, wmNotifier *wmn)
+static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 {
 	SpaceImage *sima = (SpaceImage *)sa->spacedata.first;
 	
@@ -450,6 +450,9 @@ static void image_listener(bScreen *UNUSED(sc), ScrArea *sa, wmNotifier *wmn)
 						image_scopes_tag_refresh(sa);
 					ED_area_tag_redraw(sa);
 					break;
+				case ND_TRANSFORM_DONE:
+					/* Adapt proportional mode preselection */
+					EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 			}
 			break;
 		case NC_IMAGE:
@@ -500,7 +503,27 @@ static void image_listener(bScreen *UNUSED(sc), ScrArea *sa, wmNotifier *wmn)
 		{
 			switch (wmn->data) {
 				case ND_DATA:
+					switch (wmn->action) {
+						case NA_ADDED:
+							/* Adapt proportional mode preselection */
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+
+							image_scopes_tag_refresh(sa);
+							ED_area_tag_refresh(sa);
+							ED_area_tag_redraw(sa);
+							break;
+					}
 				case ND_SELECT:
+					/* Adapt proportional mode preselection */
+					if (wmn->action != NA_PAINTING)
+						EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+				case ND_PRESELECT:
+					switch (wmn->action) {
+						case NA_ADDED:
+							/* Adapt proportional mode preselection */
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+							break;
+					}
 					image_scopes_tag_refresh(sa);
 					ED_area_tag_refresh(sa);
 					ED_area_tag_redraw(sa);
@@ -513,6 +536,15 @@ static void image_listener(bScreen *UNUSED(sc), ScrArea *sa, wmNotifier *wmn)
 			Object *ob = (Object *)wmn->reference;
 			switch (wmn->data) {
 				case ND_TRANSFORM:
+					/* Adapt proportional mode preselection */
+					if (!(sc->scene->toolsettings->proportional_size == sc->scene->toolsettings->old_proportional_size)) {
+						sc->scene->toolsettings->old_proportional_size = sc->scene->toolsettings->proportional_size;
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
+
+						ED_area_tag_refresh(sa);
+						ED_area_tag_redraw(sa);
+					}
+					break;
 				case ND_MODIFIER:
 					if (ob && (ob->mode & OB_MODE_EDIT) && sima->lock && (sima->flag & SI_DRAWSHADOW)) {
 						ED_area_tag_refresh(sa);

@@ -851,9 +851,13 @@ static void ui_drag_toggle_set(bContext *C, uiDragToggleHandle *drag_info, const
 	copy_v2_v2_int(drag_info->xy_last, xy);
 }
 
-static void ui_handler_region_drag_toggle_remove(bContext *UNUSED(C), void *userdata)
+static void ui_handler_region_drag_toggle_remove(bContext *C, void *userdata)
 {
 	uiDragToggleHandle *drag_info = userdata;
+	wmWindow *win = CTX_wm_window(C);
+	
+	WM_gestures_reset_level(win);
+
 	MEM_freeN(drag_info);
 }
 
@@ -936,11 +940,13 @@ static bool ui_but_mouse_inside_icon(uiBut *but, ARegion *ar, const wmEvent *eve
 
 static bool ui_but_start_drag(bContext *C, uiBut *but, uiHandleButtonData *data, const wmEvent *event)
 {
-	/* prevent other WM gestures to start while we try to drag */
-	WM_gestures_remove(C);
-
+	wmWindow *win = CTX_wm_window(C);
+	
 	if (ABS(data->dragstartx - event->x) + ABS(data->dragstarty - event->y) > U.dragthreshold) {
 
+		/* prevent other WM gestures to start while we try to drag */
+		win->gesture_level = WM_GESTURE_OVERRIDE;
+		
 		button_activate_state(C, but, BUTTON_STATE_EXIT);
 		data->cancel = true;
 #ifdef USE_DRAG_TOGGLE

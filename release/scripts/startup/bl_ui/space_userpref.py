@@ -266,7 +266,14 @@ class USERPREF_PT_edit(Panel):
         col.prop(edit, "use_global_undo")
         col.prop(edit, "undo_steps", text="Steps")
         col.prop(edit, "undo_memory_limit", text="Memory Limit")
+        
+        col.separator()
+        col.separator()
+        col.separator()
 
+        col.label(text="Circle Select:")
+        col.prop(edit, "grow_with_zoom", text="Grow with Zoom")
+        
         row.separator()
         row.separator()
 

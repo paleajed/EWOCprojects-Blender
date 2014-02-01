@@ -1,0 +1,27 @@
+***************
+*** 43,53 ****
+  #include "BLI_utildefines.h"
+  
+  #include "BKE_context.h"
+  #include "BKE_icons.h"
+  #include "BKE_main.h"
+  #include "BKE_object.h"
+  #include "BKE_screen.h"
+  
+  #include "ED_render.h"
+  #include "ED_space_api.h"
+  #include "ED_screen.h"
+--- 43,55 ----
+  #include "BLI_utildefines.h"
+  
+  #include "BKE_context.h"
++ #include "BKE_editmesh.h"
+  #include "BKE_icons.h"
+  #include "BKE_main.h"
+  #include "BKE_object.h"
+  #include "BKE_screen.h"
+  
++ #include "ED_mesh.h"
+  #include "ED_render.h"
+  #include "ED_space_api.h"
+  #include "ED_screen.h"

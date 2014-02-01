@@ -1319,7 +1319,6 @@ void EDBM_update_generic(BMEditMesh *em, const bool do_tessface, const bool is_d
 	Object *ob = em->ob;
 	/* order of calling isn't important */
 	DAG_id_tag_update(ob->data, OB_RECALC_DATA);
-	WM_main_add_notifier(NC_GEOM | ND_DATA, ob->data);
 
 	if (do_tessface) {
 		BKE_editmesh_tessface_calc(em);
@@ -1333,6 +1332,7 @@ void EDBM_update_generic(BMEditMesh *em, const bool do_tessface, const bool is_d
 		/* in debug mode double check we didn't need to recalculate */
 		BLI_assert(BM_mesh_elem_table_check(em->bm) == true);
 	}
+	WM_main_add_notifier(NC_GEOM | ND_DATA | NA_ADDED, ob->data); /* or NA_REMOVED */
 }
 
 /* poll call for mesh operators requiring a view3d context */

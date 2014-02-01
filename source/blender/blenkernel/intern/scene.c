@@ -507,6 +507,8 @@ Scene *BKE_scene_add(Main *bmain, const char *name)
 	sce->toolsettings->selectmode = SCE_SELECT_VERTEX;
 	sce->toolsettings->uv_selectmode = UV_SELECT_VERTEX;
 	sce->toolsettings->normalsize = 0.1;
+	sce->toolsettings->show_presel_normals = false;
+	sce->toolsettings->use_presel = true;
 	sce->toolsettings->autokey_mode = U.autokey_mode;
 
 	sce->toolsettings->snap_node_mode = SCE_SNAP_MODE_GRID;

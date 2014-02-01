@@ -1,0 +1,25 @@
+***************
+*** 1324,1333 ****
+  
+  	if (is_destructive) {
+  		EDBM_index_arrays_free(em);
+  	}
+  	else {
+  		/* in debug mode double check we didn't need to recalculate */
+  		BLI_assert(EDBM_index_arrays_check(em) == true);
+  	}
+  }
+  
+--- 1323,1334 ----
+  
+  	if (is_destructive) {
+  		EDBM_index_arrays_free(em);
++ 		WM_main_add_notifier(NC_GEOM | ND_DATA | NA_ADDED, ob->data); /* or NA_REMOVED */
+  	}
+  	else {
+  		/* in debug mode double check we didn't need to recalculate */
+  		BLI_assert(EDBM_index_arrays_check(em) == true);
++ 		WM_main_add_notifier(NC_GEOM | ND_DATA | NA_EDITED, ob->data);
+  	}
+  }
+  

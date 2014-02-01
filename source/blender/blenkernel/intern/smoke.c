@@ -786,7 +786,7 @@ static void obstacles_from_derivedmesh(Object *coll_ob, SmokeDomainSettings *sds
 			copy_v3_v3(&scs->verts_old[i * 3], co);
 		}
 
-		if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6)) {
+		if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6, true)) {
 #pragma omp parallel for schedule(static)
 			for (z = sds->res_min[2]; z < sds->res_max[2]; z++) {
 				int x, y;
@@ -1250,7 +1250,7 @@ static void emit_from_particles(Object *flow_ob, SmokeDomainSettings *sds, Smoke
 
 		/* setup particle radius emission if enabled */
 		if (sfs->flags & MOD_SMOKE_FLOW_USE_PART_SIZE) {
-			tree = BLI_kdtree_new(psys->totpart + psys->totchild);
+			tree = BLI_kdtree_new(psys->totpart);
 
 			/* check need for high resolution map */
 			if ((sds->flags & MOD_SMOKE_HIGHRES) && (sds->highres_sampling == SM_HRES_FULLSAMPLE)) {
@@ -1633,7 +1633,7 @@ static void emit_from_derivedmesh(Object *flow_ob, SmokeDomainSettings *sds, Smo
 			res[i] = em->res[i] * hires_multiplier;
 		}
 
-		if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6)) {
+		if (bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6, true)) {
 #pragma omp parallel for schedule(static)
 			for (z = min[2]; z < max[2]; z++) {
 				int x, y;

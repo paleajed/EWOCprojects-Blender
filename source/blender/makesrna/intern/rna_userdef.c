@@ -1504,11 +1504,31 @@ static void rna_def_userdef_theme_space_view3d(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Transform", "");
 	RNA_def_property_update(prop, 0, "rna_userdef_update");
 	
+	prop = RNA_def_property(srna, "transform_set", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_ui_text(prop, "Transform Set", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
 	rna_def_userdef_theme_spaces_vertex(srna);
 	rna_def_userdef_theme_spaces_edge(srna);
 	rna_def_userdef_theme_spaces_face(srna);
 	rna_def_userdef_theme_spaces_curves(srna, 1);
 
+	prop = RNA_def_property(srna, "presel_select", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Selected", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
+	prop = RNA_def_property(srna, "presel_noselect", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Not Selected", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
+	prop = RNA_def_property(srna, "presel_prop", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Proportional", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
 	prop = RNA_def_property(srna, "extra_edge_len", PROP_FLOAT, PROP_COLOR_GAMMA);
 	RNA_def_property_array(prop, 3);
 	RNA_def_property_ui_text(prop, "Edge Length Text", "");
@@ -2208,6 +2228,21 @@ static void rna_def_userdef_theme_space_image(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Active Vert/Edge/Face", "");
 	RNA_def_property_update(prop, 0, "rna_userdef_update");
 
+	prop = RNA_def_property(srna, "presel_select", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Selected", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
+	prop = RNA_def_property(srna, "presel_noselect", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Not Selected", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
+	prop = RNA_def_property(srna, "presel_prop", PROP_FLOAT, PROP_COLOR_GAMMA);
+	RNA_def_property_array(prop, 4);
+	RNA_def_property_ui_text(prop, "Preselection Proportional", "");
+	RNA_def_property_update(prop, 0, "rna_userdef_update");
+	
 	prop = RNA_def_property(srna, "wire_edit", PROP_FLOAT, PROP_COLOR_GAMMA);
 	RNA_def_property_array(prop, 3);
 	RNA_def_property_ui_text(prop, "Wire Edit", "");
@@ -3343,7 +3378,12 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Global Undo",
 	                         "Global undo works by keeping a full copy of the file itself in memory, "
 	                         "so takes extra memory");
-
+	
+	/* circle select */
+	prop = RNA_def_property(srna, "grow_with_zoom", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_GROW_CIRCLESELECT);
+	RNA_def_property_ui_text(prop, "Grow Circle", "Grow Circle select size with zoom");
+	                         
 	/* auto keyframing */
 	prop = RNA_def_property(srna, "use_auto_keying", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "autokey_mode", AUTOKEY_ON);
@@ -3498,6 +3538,7 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_duplicate_particle", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_PSYS);
 	RNA_def_property_ui_text(prop, "Duplicate Particle", "Causes particle systems to be duplicated with the object");
+
 }
 
 static void rna_def_userdef_system(BlenderRNA *brna)

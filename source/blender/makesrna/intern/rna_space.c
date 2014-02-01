@@ -105,6 +105,7 @@ static EnumPropertyItem transform_orientation_items[] = {
 	                   "(bone Y axis for pose mode)"},
 	{V3D_MANIP_GIMBAL, "GIMBAL", 0, "Gimbal", "Align each axis to the Euler rotation axis as used for input"},
 	{V3D_MANIP_VIEW, "VIEW", 0, "View", "Align the transformation axes to the window"},
+	{V3D_MANIP_FREE, "FREE", 0, "Free", "Uses manipulator for transform thats set with set_manipulator button"},
 	// {V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
 	{0, NULL, 0, NULL, NULL}
 };
@@ -388,6 +389,20 @@ static float rna_View3D_GridScaleUnit_get(PointerRNA *ptr)
 	Scene *scene = (Scene *)sc->scene;
 
 	return ED_view3d_grid_scale(scene, v3d, NULL);
+}
+
+static void rna_SpaceView3D_set_manipulator_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+	View3D *v3d = (View3D *)(ptr->data);
+	v3d->twmode = V3D_MANIP_FREE;
+}
+
+static void rna_TransformOrientation_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+	View3D *v3d = (View3D *)(ptr->data);
+	if (!(v3d->twmode == V3D_MANIP_FREE)) {
+		v3d->twflag &= ~V3D_SET_MANIPULATOR;
+	}
 }
 
 static void rna_SpaceView3D_layer_set(PointerRNA *ptr, const int *values)
@@ -1710,6 +1725,20 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 		{0, NULL, 0, NULL, NULL}
 	};
 
+	static EnumPropertyItem pivot_free[] = {
+		{V3D_CENTER, "BOUNDING_BOX_CENTER", ICON_ROTATE, "Bounding Box Center",
+		             "Pivot around bounding box center of selected object(s)"},
+		{V3D_CURSOR, "CURSOR", ICON_CURSOR, "3D Cursor", "Pivot around the 3D cursor"},
+		{V3D_LOCAL, "INDIVIDUAL_ORIGINS", ICON_ROTATECOLLECTION,
+		            "Individual Origins", "Pivot around each object's own origin"},
+		{V3D_CENTROID, "MEDIAN_POINT", ICON_ROTATECENTER, "Median Point",
+		               "Pivot around the median point of selected objects"},
+		{V3D_ACTIVE, "ACTIVE_ELEMENT", ICON_ROTACTIVE, "Active Element", "Pivot around active object"},
+		{V3D_FREE, "Manipulator", ICON_MANIPUL, "Manipulator",
+		             "Pivot moves freely with manipulator"},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	static EnumPropertyItem manipulators_items[] = {
 		{V3D_MANIP_TRANSLATE, "TRANSLATE", ICON_MAN_TRANS, "Manipulator Translate",
 		                      "Use the manipulator for movement transformations"},
@@ -1992,6 +2021,11 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Pivot Point", "Pivot center for rotation/scaling");
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, "rna_SpaceView3D_pivot_update");
 	
+	prop = RNA_def_property(srna, "pivot_free", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "around");
+	RNA_def_property_enum_items(prop, pivot_free);
+	RNA_def_property_ui_text(prop, "Free Pivot Point", "Pivot center moves freely with manipulator");
+	
 	prop = RNA_def_property(srna, "use_pivot_point_align", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", V3D_ALIGN);
 	RNA_def_property_ui_text(prop, "Align", "Manipulate center points (object and pose mode only)");
@@ -2016,12 +2050,18 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 	RNA_def_property_enum_items(prop, transform_orientation_items);
 	RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_TransformOrientation_itemf");
 	RNA_def_property_ui_text(prop, "Transform Orientation", "Transformation orientation");
-	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, "rna_TransformOrientation_update");
 
 	prop = RNA_def_property(srna, "current_orientation", PROP_POINTER, PROP_NONE);
 	RNA_def_property_struct_type(prop, "TransformOrientation");
 	RNA_def_property_pointer_funcs(prop, "rna_CurrentOrientation_get", NULL, NULL, NULL);
 	RNA_def_property_ui_text(prop, "Current Transform Orientation", "Current transformation orientation");
+
+	prop = RNA_def_property(srna, "set_manipulator", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "twflag", V3D_SET_MANIPULATOR);
+	RNA_def_property_ui_text(prop, "Set Manipulator", "Unlink and set 3D manipulator widget");
+	RNA_def_property_ui_icon(prop, ICON_MANIPUL, 0);
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, "rna_SpaceView3D_set_manipulator_update");
 
 	prop = RNA_def_property(srna, "lock_camera_and_layers", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "scenelock", 1);
