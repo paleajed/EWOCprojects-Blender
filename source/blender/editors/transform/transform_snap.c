@@ -1605,7 +1605,7 @@ static bool snapDerivedMesh(short snap_mode, ARegion *ar, Object *ob, DerivedMes
 				               len_diff - len_v3v3(ray_start_local, ray_org_local));
 
 				treeData.em_evil = em;
-				bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6);
+				bvhtree_from_mesh_faces(&treeData, dm, 0.0f, 4, 6, !setmanip);
 
 				hit.index = -1;
 				hit.dist = *r_depth * (*r_depth == TRANSFORM_DIST_MAX_RAY ? 1.0f : local_scale);

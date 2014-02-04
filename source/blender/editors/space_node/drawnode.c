@@ -699,29 +699,37 @@ static void node_shader_buts_material(uiLayout *layout, bContext *C, PointerRNA 
 
 static void node_shader_buts_mapping(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-	uiLayout *row;
-	
+	uiLayout *row, *col, *sub;
+
 	uiItemR(layout, ptr, "vector_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
-	uiItemL(layout, IFACE_("Location:"), ICON_NONE);
-	row = uiLayoutRow(layout, TRUE);
-	uiItemR(row, ptr, "translation", 0, "", ICON_NONE);
-	
-	uiItemL(layout, IFACE_("Rotation:"), ICON_NONE);
-	row = uiLayoutRow(layout, TRUE);
-	uiItemR(row, ptr, "rotation", 0, "", ICON_NONE);
-	
-	uiItemL(layout, IFACE_("Scale:"), ICON_NONE);
-	row = uiLayoutRow(layout, TRUE);
-	uiItemR(row, ptr, "scale", 0, "", ICON_NONE);
-	
-	row = uiLayoutRow(layout, TRUE);
-	uiItemR(row, ptr, "use_min", 0, IFACE_("Min"), ICON_NONE);
-	uiItemR(row, ptr, "min", 0, "", ICON_NONE);
-	
-	row = uiLayoutRow(layout, TRUE);
-	uiItemR(row, ptr, "use_max", 0, IFACE_("Max"), ICON_NONE);
-	uiItemR(row, ptr, "max", 0, "", ICON_NONE);
+	row = uiLayoutRow(layout, FALSE);
+
+	col = uiLayoutColumn(row, TRUE);
+	uiItemL(col, IFACE_("Location:"), ICON_NONE);
+	uiItemR(col, ptr, "translation", 0, "", ICON_NONE);
+
+	col = uiLayoutColumn(row, TRUE);
+	uiItemL(col, IFACE_("Rotation:"), ICON_NONE);
+	uiItemR(col, ptr, "rotation", 0, "", ICON_NONE);
+
+	col = uiLayoutColumn(row, TRUE);
+	uiItemL(col, IFACE_("Scale:"), ICON_NONE);
+	uiItemR(col, ptr, "scale", 0, "", ICON_NONE);
+
+	row = uiLayoutRow(layout, FALSE);
+
+	col = uiLayoutColumn(row, TRUE);
+	uiItemR(col, ptr, "use_min", 0, IFACE_("Min"), ICON_NONE);
+	sub = uiLayoutColumn(col, TRUE);
+	uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_min"));
+	uiItemR(sub, ptr, "min", 0, "", ICON_NONE);
+
+	col = uiLayoutColumn(row, TRUE);
+	uiItemR(col, ptr, "use_max", 0, IFACE_("Max"), ICON_NONE);
+	sub = uiLayoutColumn(col, TRUE);
+	uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_max"));
+	uiItemR(sub, ptr, "max", 0, "", ICON_NONE);
 }
 
 static void node_shader_buts_vect_math(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -3202,7 +3210,7 @@ int node_link_bezier_points(View2D *v2d, SpaceNode *snode, bNodeLink *link, floa
 #define LINK_ARROW  12  /* position of arrow on the link, LINK_RESOL/2 */
 #define ARROW_SIZE 7
 void node_draw_link_bezier(View2D *v2d, SpaceNode *snode, bNodeLink *link,
-                           int th_col1, int do_shaded, int th_col2, int do_triple, int th_col3)
+                           int th_col1, bool do_shaded, int th_col2, bool do_triple, int th_col3)
 {
 	float coord_array[LINK_RESOL + 1][2];
 	
@@ -3388,8 +3396,9 @@ void node_draw_link_straight(View2D *v2d, SpaceNode *snode, bNodeLink *link,
 /* note; this is used for fake links in groups too */
 void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
 {
-	int do_shaded = FALSE, th_col1 = TH_HEADER, th_col2 = TH_HEADER;
-	int do_triple = FALSE, th_col3 = TH_WIRE;
+	bool do_shaded = false;
+	bool do_triple = false;
+	int th_col1 = TH_HEADER, th_col2 = TH_HEADER, th_col3 = TH_WIRE;
 	
 	if (link->fromsock == NULL && link->tosock == NULL)
 		return;

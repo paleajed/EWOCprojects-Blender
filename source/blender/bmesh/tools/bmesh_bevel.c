@@ -2135,7 +2135,7 @@ static VMesh *make_cube_corner_straight(MemArena *mem_arena, int nseg)
 	float co[3];
 	int i, j, k, ns2;
 
-    ns2 = nseg / 2;
+	ns2 = nseg / 2;
 	vm = new_adj_vmesh(mem_arena, 3, nseg, NULL);
 	vm->count = 0;  // reset, so following loop will end up with correct count
 	for (i = 0; i < 3; i++) {
@@ -2510,8 +2510,6 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 		v = vm->boundstart;
 		do {
 			i = v->index;
-			f = boundvert_rep_face(v);
-			f2 = boundvert_rep_face(v->next);
 			if (!v->any_seam) {
 				for (ring = 1; ring < ns2; ring++) {
 					BMVert *v_uv = mesh_vert(vm, i, ring, ns2)->v;
@@ -3004,7 +3002,7 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
 }
 
 /* Face f has at least one beveled vertex.  Rebuild f */
-static int bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
+static bool bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
 {
 	BMIter liter;
 	BMLoop *l, *lprev;
@@ -3013,7 +3011,7 @@ static int bev_rebuild_polygon(BMesh *bm, BevelParams *bp, BMFace *f)
 	EdgeHalf *e, *eprev;
 	VMesh *vm;
 	int i, k;
-	int do_rebuild = FALSE;
+	bool do_rebuild = false;
 	BMVert *bmv;
 	BMVert **vv = NULL;
 	BMVert **vv_fix = NULL;

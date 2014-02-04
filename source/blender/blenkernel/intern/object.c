@@ -112,6 +112,7 @@
 #include "BKE_softbody.h"
 #include "BKE_material.h"
 #include "BKE_camera.h"
+#include "BKE_image.h"
 
 #ifdef WITH_MOD_FLUID
 #include "LBM_fluidsim.h"
@@ -369,6 +370,8 @@ void BKE_object_free_ex(Object *ob, bool do_id_user)
 	if (ob->matbits) MEM_freeN(ob->matbits);
 	ob->mat = NULL;
 	ob->matbits = NULL;
+	if (ob->iuser) MEM_freeN(ob->iuser);
+	ob->iuser = NULL;
 	if (ob->bb) MEM_freeN(ob->bb); 
 	ob->bb = NULL;
 	if (ob->adt) BKE_free_animdata((ID *)ob);
@@ -1107,23 +1110,23 @@ static LodLevel *lod_level_select(Object *ob, const float cam_loc[3])
 {
 	LodLevel *current = ob->currentlod;
 	float ob_loc[3], delta[3];
-	float distance2;
+	float dist_sq;
 
 	if (!current) return NULL;
 
 	copy_v3_v3(ob_loc, ob->obmat[3]);
 	sub_v3_v3v3(delta, ob_loc, cam_loc);
-	distance2 = len_squared_v3(delta);
+	dist_sq = len_squared_v3(delta);
 
-	if (distance2 < current->distance * current->distance) {
+	if (dist_sq < current->distance * current->distance) {
 		/* check for higher LoD */
-		while (current->prev && distance2 < (current->distance * current->distance)) {
+		while (current->prev && dist_sq < (current->distance * current->distance)) {
 			current = current->prev;
 		}
 	}
 	else {
 		/* check for lower LoD */
-		while (current->next && distance2 > (current->next->distance * current->next->distance)) {
+		while (current->next && dist_sq > (current->next->distance * current->next->distance)) {
 			current = current->next;
 		}
 	}
@@ -1450,6 +1453,8 @@ Object *BKE_object_copy_ex(Main *bmain, Object *ob, int copy_caches)
 		obn->matbits = MEM_dupallocN(ob->matbits);
 		obn->totcol = ob->totcol;
 	}
+
+	if (ob->iuser) obn->iuser = MEM_dupallocN(ob->iuser);
 	
 	if (ob->bb) obn->bb = MEM_dupallocN(ob->bb);
 	obn->flag &= ~OB_FROMGROUP;
@@ -1979,7 +1984,6 @@ static void ob_parcurve(Scene *scene, Object *ob, Object *par, float mat[4][4])
 {
 	Curve *cu;
 	float vec[4], dir[3], quat[4], radius, ctime;
-	float timeoffs = 0.0, sf_orig = 0.0;
 	
 	unit_m4(mat);
 	
@@ -2014,15 +2018,6 @@ static void ob_parcurve(Scene *scene, Object *ob, Object *par, float mat[4][4])
 		
 		CLAMP(ctime, 0.0f, 1.0f);
 	}
-	
-	/* time calculus is correct, now apply distance offset */
-	if (cu->flag & CU_OFFS_PATHDIST) {
-		ctime += timeoffs / par->curve_cache->path->totdist;
-
-		/* restore */
-		SWAP(float, sf_orig, ob->sf);
-	}
-	
 	
 	/* vec: 4 items! */
 	if (where_on_path(par, ctime, vec, dir, cu->flag & CU_FOLLOW ? quat : NULL, &radius, NULL)) {
@@ -2652,6 +2647,27 @@ void BKE_object_minmax(Object *ob, float min_r[3], float max_r[3], const bool us
 	}
 }
 
+void BKE_object_empty_draw_type_set(Object *ob, const int value)
+{
+	ob->empty_drawtype = value;
+
+	if (ob->type == OB_EMPTY && ob->empty_drawtype == OB_EMPTY_IMAGE) {
+		if (!ob->iuser) {
+			ob->iuser = MEM_callocN(sizeof(ImageUser), "image user");
+			ob->iuser->ok = 1;
+			ob->iuser->frames = 100;
+			ob->iuser->sfra = 1;
+			ob->iuser->fie_ima = 2;
+		}
+	}
+	else {
+		if (ob->iuser) {
+			MEM_freeN(ob->iuser);
+			ob->iuser = NULL;
+		}
+	}
+}
+
 bool BKE_object_minmax_dupli(Scene *scene, Object *ob, float r_min[3], float r_max[3], const bool use_hidden)
 {
 	bool ok = false;
@@ -2932,6 +2948,12 @@ void BKE_object_handle_update_ex(EvaluationContext *eval_ctx,
 				case OB_LATTICE:
 					BKE_lattice_modifiers_calc(scene, ob);
 					break;
+
+				case OB_EMPTY:
+					if (ob->empty_drawtype == OB_EMPTY_IMAGE && ob->data)
+						if (BKE_image_is_animated(ob->data))
+							BKE_image_user_check_frame_calc(ob->iuser, (int)ctime, 0);
+					break;
 			}
 			
 			/* related materials */
@@ -3192,7 +3214,7 @@ void object_delete_ptcache(Object *ob, int index)
 /* shape key utility function */
 
 /************************* Mesh ************************/
-static KeyBlock *insert_meshkey(Scene *scene, Object *ob, const char *name, int from_mix)
+static KeyBlock *insert_meshkey(Scene *scene, Object *ob, const char *name, const bool from_mix)
 {
 	Mesh *me = ob->data;
 	Key *key = me->key;
@@ -3224,7 +3246,7 @@ static KeyBlock *insert_meshkey(Scene *scene, Object *ob, const char *name, int 
 	return kb;
 }
 /************************* Lattice ************************/
-static KeyBlock *insert_lattkey(Scene *scene, Object *ob, const char *name, int from_mix)
+static KeyBlock *insert_lattkey(Scene *scene, Object *ob, const char *name, const bool from_mix)
 {
 	Lattice *lt = ob->data;
 	Key *key = lt->key;
@@ -3262,7 +3284,7 @@ static KeyBlock *insert_lattkey(Scene *scene, Object *ob, const char *name, int 
 	return kb;
 }
 /************************* Curve ************************/
-static KeyBlock *insert_curvekey(Scene *scene, Object *ob, const char *name, int from_mix)
+static KeyBlock *insert_curvekey(Scene *scene, Object *ob, const char *name, const bool from_mix)
 {
 	Curve *cu = ob->data;
 	Key *key = cu->key;
@@ -3302,7 +3324,7 @@ static KeyBlock *insert_curvekey(Scene *scene, Object *ob, const char *name, int
 	return kb;
 }
 
-KeyBlock *BKE_object_insert_shape_key(Scene *scene, Object *ob, const char *name, int from_mix)
+KeyBlock *BKE_object_insert_shape_key(Scene *scene, Object *ob, const char *name, const bool from_mix)
 {	
 	switch (ob->type) {
 		case OB_MESH:

@@ -78,13 +78,12 @@ void    make_editText(struct Object *obedit);
 void    load_editText(struct Object *obedit);
 void    free_editText(struct Object *obedit);
 
-void    ED_text_to_object(struct bContext *C, struct Text *text, int split_lines);
+void    ED_text_to_object(struct bContext *C, struct Text *text, const bool split_lines);
 
 bool ED_curve_select_nth(struct Curve *cu, int nth);
 
 void ED_curve_beztcpy(struct EditNurb *editnurb, struct BezTriple *dst, struct BezTriple *src, int count);
 void ED_curve_bpcpy(struct EditNurb *editnurb, struct BPoint *dst, struct BPoint *src, int count);
-struct Nurb *ED_curve_nurbcpy(struct Nurb *src, int count);
 
 int ED_curve_updateAnimPaths(struct Curve *cu);
 

@@ -1981,7 +1981,7 @@ static void dag_object_time_update_flags(Main *bmain, Scene *scene, Object *ob)
 }
 
 /* recursively update objects in groups, each group is done at most once */
-static void dag_group_update_flags(Main *bmain, Scene *scene, Group *group, const short do_time)
+static void dag_group_update_flags(Main *bmain, Scene *scene, Group *group, const bool do_time)
 {
 	GroupObject *go;
 
@@ -2000,7 +2000,7 @@ static void dag_group_update_flags(Main *bmain, Scene *scene, Group *group, cons
 
 /* flag all objects that need recalc, for changes in time for example */
 /* do_time: make this optional because undo resets objects to their animated locations without this */
-void DAG_scene_update_flags(Main *bmain, Scene *scene, unsigned int lay, const short do_time)
+void DAG_scene_update_flags(Main *bmain, Scene *scene, unsigned int lay, const bool do_time)
 {
 	Base *base;
 	Object *ob;
@@ -2153,7 +2153,7 @@ static void dag_group_on_visible_update(Group *group)
 	}
 }
 
-void DAG_on_visible_update(Main *bmain, const short do_time)
+void DAG_on_visible_update(Main *bmain, const bool do_time)
 {
 	ListBase listbase;
 	DagSceneLayer *dsl;
@@ -2221,7 +2221,7 @@ void DAG_on_visible_update(Main *bmain, const short do_time)
 
 static void dag_id_flush_update__isDependentTexture(void *userData, Object *UNUSED(ob), ID **idpoin)
 {
-	struct { ID *id; int is_dependent; } *data = userData;
+	struct { ID *id; bool is_dependent; } *data = userData;
 	
 	if (*idpoin && GS((*idpoin)->name) == ID_TE) {
 		if (data->id == (*idpoin))
@@ -2279,7 +2279,7 @@ static void dag_id_flush_update(Main *bmain, Scene *sce, ID *id)
 		/* set flags based on textures - can influence depgraph via modifiers */
 		if (idtype == ID_TE) {
 			for (obt = bmain->object.first; obt; obt = obt->id.next) {
-				struct { ID *id; int is_dependent; } data;
+				struct { ID *id; bool is_dependent; } data;
 				data.id = id;
 				data.is_dependent = 0;
 
