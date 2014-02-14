@@ -61,7 +61,6 @@
 #include "BKE_editmesh.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
-#include "BKE_deform.h"
 #include "BKE_scene.h"
 
 
@@ -1397,7 +1396,7 @@ float *BKE_key_evaluate_object_ex(Scene *scene, Object *ob, int *r_totelem,
 	char *out;
 	int tot = 0, size = 0;
 
-	if (key == NULL || key->block.first == NULL)
+	if (key == NULL || BLI_listbase_is_empty(&key->block))
 		return NULL;
 
 	/* compute size of output array */

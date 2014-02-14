@@ -87,26 +87,6 @@
 /* for ndof prints */
 // #define DEBUG_NDOF_MOTION
 
-/**
- * Mostly this function just checks ``rv3d->viewlock & RV3D_LOCKED`` however there is a
- * special case where the flag is set but the user already switched out of an axis locked view.
- *
- * The 'view' in the function name refers to #RegionView3D.view which we may be locked.
- *
- * Functions which change the 'view' should call this check first, or...
- * only apply to the user view (in the instance of a quad-view setup).
- */
-bool ED_view3d_view_lock_check(View3D *UNUSED(v3d), RegionView3D *rv3d)
-{
-	if (rv3d->viewlock & RV3D_LOCKED) {
-		if ((RV3D_VIEW_IS_AXIS(rv3d->view) || rv3d->view == RV3D_VIEW_CAMERA)) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
 bool ED_view3d_offset_lock_check(struct View3D *v3d, struct RegionView3D *rv3d)
 {
 	return (rv3d->persp != RV3D_CAMOB) && (v3d->ob_centre_cursor || v3d->ob_centre);
@@ -303,6 +283,56 @@ static void view3d_boxview_clip(ScrArea *sa)
 	MEM_freeN(bb);
 }
 
+/**
+ * Find which axis values are shared between both views and copy to \a rv3d_dst
+ * taking axis flipping into account.
+ */
+static void view3d_boxview_sync_axis(RegionView3D *rv3d_dst, RegionView3D *rv3d_src)
+{
+	/* absolute axis values above this are considered to be set (will be ~1.0f) */
+	const float axis_eps = 0.5f;
+	float viewinv[4];
+
+	/* use the view rotation to identify which axis to sync on */
+	float view_axis_all[4][3] = {
+	    {1.0f, 0.0f, 0.0f},
+	    {0.0f, 1.0f, 0.0f},
+	    {1.0f, 0.0f, 0.0f},
+	    {0.0f, 1.0f, 0.0f}};
+
+	float *view_src_x = &view_axis_all[0][0];
+	float *view_src_y = &view_axis_all[1][0];
+
+	float *view_dst_x = &view_axis_all[2][0];
+	float *view_dst_y = &view_axis_all[3][0];
+	int i;
+
+
+	/* we could use rv3d->viewinv, but better not depend on view matrix being updated */
+	if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_src->view, viewinv) == false)) {
+		return;
+	}
+	invert_qt(viewinv);
+	mul_qt_v3(viewinv, view_src_x);
+	mul_qt_v3(viewinv, view_src_y);
+
+	if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_dst->view, viewinv) == false)) {
+		return;
+	}
+	invert_qt(viewinv);
+	mul_qt_v3(viewinv, view_dst_x);
+	mul_qt_v3(viewinv, view_dst_y);
+
+	/* check source and dest have a matching axis */
+	for (i = 0; i < 3; i++) {
+		if (((fabsf(view_src_x[i]) > axis_eps) || (fabsf(view_src_y[i]) > axis_eps)) &&
+		    ((fabsf(view_dst_x[i]) > axis_eps) || (fabsf(view_dst_y[i]) > axis_eps)))
+		{
+			rv3d_dst->ofs[i] = rv3d_src->ofs[i];
+		}
+	}
+}
+
 /* sync center/zoom view of region to others, for view transforms */
 static void view3d_boxview_sync(ScrArea *sa, ARegion *ar)
 {
@@ -316,26 +346,7 @@ static void view3d_boxview_sync(ScrArea *sa, ARegion *ar)
 
 			if (rv3dtest->viewlock & RV3D_LOCKED) {
 				rv3dtest->dist = rv3d->dist;
-
-				if (ELEM(rv3d->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM)) {
-					if (ELEM(rv3dtest->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK))
-						rv3dtest->ofs[0] = rv3d->ofs[0];
-					else if (ELEM(rv3dtest->view, RV3D_VIEW_RIGHT, RV3D_VIEW_LEFT))
-						rv3dtest->ofs[1] = rv3d->ofs[1];
-				}
-				else if (ELEM(rv3d->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK)) {
-					if (ELEM(rv3dtest->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM))
-						rv3dtest->ofs[0] = rv3d->ofs[0];
-					else if (ELEM(rv3dtest->view, RV3D_VIEW_RIGHT, RV3D_VIEW_LEFT))
-						rv3dtest->ofs[2] = rv3d->ofs[2];
-				}
-				else if (ELEM(rv3d->view, RV3D_VIEW_RIGHT, RV3D_VIEW_LEFT)) {
-					if (ELEM(rv3dtest->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM))
-						rv3dtest->ofs[1] = rv3d->ofs[1];
-					if (ELEM(rv3dtest->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK))
-						rv3dtest->ofs[2] = rv3d->ofs[2];
-				}
-
+				view3d_boxview_sync_axis(rv3dtest, rv3d);
 				clip |= rv3dtest->viewlock & RV3D_BOXCLIP;
 
 				ED_region_tag_redraw(artest);
@@ -409,7 +420,25 @@ void ED_view3d_quadview_update(ScrArea *sa, ARegion *ar, bool do_clip)
 	}
 
 	if (rv3d->viewlock & RV3D_BOXVIEW) {
-		view3d_boxview_copy(sa, ar_sync ? ar_sync : sa->regionbase.last);
+		view3d_boxview_sync(sa, ar_sync ? ar_sync : sa->regionbase.last);
+	}
+
+	/* ensure locked regions have an axis, locked user views don't make much sense */
+	if (viewlock & RV3D_LOCKED) {
+		int index_qsplit = 0;
+		for (ar = sa->regionbase.first; ar; ar = ar->next) {
+			if (ar->alignment == RGN_ALIGN_QSPLIT) {
+				rv3d = ar->regiondata;
+				if (rv3d->viewlock) {
+					if (!RV3D_VIEW_IS_AXIS(rv3d->view)) {
+						rv3d->view = ED_view3d_lock_view_from_index(index_qsplit);
+						rv3d->persp = RV3D_ORTHO;
+						ED_view3d_lock(rv3d);
+					}
+				}
+				index_qsplit++;
+			}
+		}
 	}
 
 	ED_area_tag_redraw(sa);
@@ -1003,6 +1032,30 @@ static int viewrotate_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	return OPERATOR_RUNNING_MODAL;
 }
 
+/**
+ * Action to take when rotating the view,
+ * handle auto-persp and logic for switching out of views.
+ *
+ * shared with NDOF.
+ */
+static void view3d_ensure_persp(struct View3D *v3d, ARegion *ar)
+{
+	RegionView3D *rv3d = ar->regiondata;
+
+	BLI_assert((rv3d->viewlock & RV3D_LOCKED) == 0);
+
+	if (rv3d->persp != RV3D_PERSP) {
+		if (rv3d->persp == RV3D_CAMOB) {
+			view3d_persp_switch_from_camera(v3d, rv3d, rv3d->lpersp);
+		}
+		else if ((U.uiflag & USER_AUTOPERSP) && RV3D_VIEW_IS_AXIS(rv3d->view)) {
+			if (!ED_view3d_camera_lock_check(v3d, rv3d)) {
+				rv3d->persp = RV3D_PERSP;
+			}
+		}
+	}
+}
+
 static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod;
@@ -1016,23 +1069,13 @@ static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	vod = op->customdata;
 
 	/* poll should check but in some cases fails, see poll func for details */
-	if (ED_view3d_view_lock_check(vod->v3d, vod->rv3d)) {
+	if (vod->rv3d->viewlock & RV3D_LOCKED) {
 		viewops_data_free(C, op);
 		return OPERATOR_PASS_THROUGH;
 	}
 
 	/* switch from camera view when: */
-	if (vod->rv3d->persp != RV3D_PERSP) {
-		if (vod->rv3d->persp == RV3D_CAMOB) {
-			view3d_persp_switch_from_camera(vod->v3d, vod->rv3d, vod->rv3d->lpersp);
-		}
-		else if ((U.uiflag & USER_AUTOPERSP) && RV3D_VIEW_IS_AXIS(vod->rv3d->view)) {
-			if (!ED_view3d_camera_lock_check(vod->v3d, vod->rv3d)) {
-				vod->rv3d->persp = RV3D_PERSP;
-			}
-		}
-		ED_region_tag_redraw(vod->ar);
-	}
+	view3d_ensure_persp(vod->v3d, vod->ar);
 	
 	if (event->type == MOUSEPAN) {
 		/* Rotate direction we keep always same */
@@ -1117,6 +1160,10 @@ void VIEW3D_OT_rotate(wmOperatorType *ot)
 /* NDOF utility functions
  * (should these functions live in this file?)
  */
+
+#define NDOF_HAS_TRANSLATE ((!view3d_operator_offset_lock_check(C, op)) && !is_zero_v3(ndof->tvec))
+#define NDOF_HAS_ROTATE    (((rv3d->viewlock & RV3D_LOCKED) == 0) && !is_zero_v3(ndof->rvec))
+
 float ndof_to_axis_angle(const struct wmNDOFMotionData *ndof, float axis[3])
 {
 	return ndof->dt * normalize_v3_v3(axis, ndof->rvec);
@@ -1131,11 +1178,100 @@ void ndof_to_quat(const struct wmNDOFMotionData *ndof, float q[4])
 	axis_angle_to_quat(q, axis, angle);
 }
 
-static void view3d_ndof_orbit(const struct wmNDOFMotionData *ndof, RegionView3D *rv3d, const float view_inv[4],
-                              const float rot_sensitivity, const float dt,
+/**
+ * Zoom and pan in the same function since sometimes zoom is interpreted as dolly (pan forward).
+ *
+ * \param has_zoom zoom, otherwise dolly, often `!rv3d->is_persp` since it doesnt make sense to dolly in ortho.
+ */
+static void view3d_ndof_pan_zoom(const struct wmNDOFMotionData *ndof, ScrArea *sa, ARegion *ar,
+                                 const bool has_translate, const bool has_zoom)
+{
+	RegionView3D *rv3d = ar->regiondata;
+	const float dt = ndof->dt;
+
+	/* tune these until everything feels right */
+	const float forward_sensitivity = 1.f;
+	const float vertical_sensitivity = 0.4f;
+	const float lateral_sensitivity = 0.6f;
+
+	float view_inv[4];
+	float pan_vec[3];
+
+	if (has_translate == false && has_zoom == false) {
+		return;
+	}
+
+	pan_vec[0] = lateral_sensitivity  * ndof->tvec[0] * ((U.ndof_flag & NDOF_PANX_INVERT_AXIS) ? -1.0f : 1.0f);
+	pan_vec[1] = vertical_sensitivity * ndof->tvec[1] * ((U.ndof_flag & NDOF_PANZ_INVERT_AXIS) ? -1.0f : 1.0f);
+	pan_vec[2] = forward_sensitivity  * ndof->tvec[2] * ((U.ndof_flag & NDOF_PANY_INVERT_AXIS) ? -1.0f : 1.0f);
+
+	if (has_zoom) {
+		/* zoom with Z */
+
+		/* Zoom!
+		 * velocity should be proportional to the linear velocity attained by rotational motion of same strength
+		 * [got that?]
+		 * proportional to arclength = radius * angle
+		 */
+
+		/* tune these until everything feels right */
+		const float zoom_sensitivity = 1.f;
+
+		pan_vec[2] = 0.0f;
+
+		/* "zoom in" or "translate"? depends on zoom mode in user settings? */
+		if (ndof->tz) {
+			float zoom_distance = zoom_sensitivity * rv3d->dist * dt * ndof->tz;
+
+			if (U.ndof_flag & NDOF_ZOOM_INVERT)
+				zoom_distance = -zoom_distance;
+
+			rv3d->dist += zoom_distance;
+		}
+	}
+	else {
+		/* dolly with Z */
+
+		/* all callers must check */
+		if (has_translate) {
+			BLI_assert(ED_view3d_offset_lock_check((View3D *)sa->spacedata.first, rv3d) == false);
+		}
+	}
+
+	if (has_translate) {
+		const float speed = rv3d->dist; /* uses distance from pivot to define dolly */
+
+		mul_v3_fl(pan_vec, speed * dt);
+
+		/* transform motion from view to world coordinates */
+		invert_qt_qt(view_inv, rv3d->viewquat);
+		mul_qt_v3(view_inv, pan_vec);
+
+		/* move center of view opposite of hand motion (this is camera mode, not object mode) */
+		sub_v3_v3(rv3d->ofs, pan_vec);
+
+		if (rv3d->viewlock & RV3D_BOXVIEW) {
+			view3d_boxview_sync(sa, ar);
+		}
+	}
+}
+
+
+static void view3d_ndof_orbit(const struct wmNDOFMotionData *ndof, RegionView3D *rv3d, const float dt,
                               /* optional, can be NULL*/
                               ViewOpsData *vod)
 {
+	const float rot_sensitivity = 1.0f;
+	float view_inv[4];
+
+	BLI_assert((rv3d->viewlock & RV3D_LOCKED) == 0);
+
+	view3d_ensure_persp(vod->v3d, vod->ar);
+
+	rv3d->view = RV3D_VIEW_USER;
+
+	invert_qt_qt(view_inv, rv3d->viewquat);
+
 	if (U.ndof_flag & NDOF_TURNTABLE) {
 
 		/* turntable view code by John Aughey, adapted for 3D mouse by [mce] */
@@ -1220,62 +1356,49 @@ static int ndof_orbit_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		return OPERATOR_CANCELLED;
 	}
 	else {
-		View3D *v3d = CTX_wm_view3d(C);
 		ViewOpsData *vod;
-		RegionView3D *rv3d = CTX_wm_region_view3d(C);
-		wmNDOFMotionData *ndof = (wmNDOFMotionData *) event->customdata;
+		View3D *v3d;
+		RegionView3D *rv3d;
 
-		ED_view3d_camera_lock_init(v3d, rv3d);
+		wmNDOFMotionData *ndof = (wmNDOFMotionData *) event->customdata;
 
 		viewops_data_alloc(C, op);
 		viewops_data_create(C, op, event);
-		vod = op->customdata;
 
-		rv3d->rot_angle = 0.f; /* off by default, until changed later this function */
+		vod = op->customdata;
+		v3d = vod->v3d;
+		rv3d = vod->rv3d;
+
+		ED_view3d_camera_lock_init(v3d, rv3d);
+
+		/* off by default, until changed later this function */
+		rv3d->rot_angle = 0.0f;
 
 		if (ndof->progress != P_FINISHING) {
-			const float dt = ndof->dt;
-
-			/* tune these until everything feels right */
-			const float rot_sensitivity = 1.f;
-#if 0
-			const float zoom_sensitivity = 1.f;
-#endif
-			const float pan_sensitivity = 1.f;
-			const bool has_rotation = ((rv3d->viewlock & RV3D_LOCKED) == 0) && !is_zero_v3(ndof->rvec);
-
-			float view_inv[4];
-			invert_qt_qt(view_inv, rv3d->viewquat);
+			const bool has_rotation = NDOF_HAS_ROTATE;
+			/* if we can't rotate, fallback to translate (locked axis views) */
+			const bool has_translate = NDOF_HAS_TRANSLATE && (rv3d->viewlock & RV3D_LOCKED);
+			const bool has_zoom = !rv3d->is_persp;
 
 #ifdef DEBUG_NDOF_MOTION
 			printf("ndof: T=(%.2f,%.2f,%.2f) R=(%.2f,%.2f,%.2f) dt=%.3f delivered to 3D view\n",
 			       ndof->tx, ndof->ty, ndof->tz, ndof->rx, ndof->ry, ndof->rz, ndof->dt);
 #endif
 
-			if (rv3d->viewlock & RV3D_LOCKED) {
-				/* rotation not allowed -- explore panning options instead */
-				float pan_vec[3] = {ndof->tx, ndof->ty, 0.0f};
-				mul_v3_fl(pan_vec, pan_sensitivity * rv3d->dist * dt);
-
-				/* transform motion from view to world coordinates */
-				invert_qt_qt(view_inv, rv3d->viewquat);
-				mul_qt_v3(view_inv, pan_vec);
-
-				/* move center of view opposite of hand motion (this is camera mode, not object mode) */
-				sub_v3_v3(rv3d->ofs, pan_vec);
+			if (has_translate || has_zoom) {
+				view3d_ndof_pan_zoom(ndof, vod->sa, vod->ar, has_translate, has_zoom);
 			}
 
 			if (has_rotation) {
-				rv3d->view = RV3D_VIEW_USER;
-				view3d_ndof_orbit(ndof, rv3d, view_inv, rot_sensitivity, dt, vod);
+				view3d_ndof_orbit(ndof, rv3d, ndof->dt, vod);
 			}
 		}
 
-		viewops_data_free(C, op);
-		
 		ED_view3d_camera_lock_sync(v3d, rv3d);
-		
-		ED_region_tag_redraw(CTX_wm_region(C));
+
+		ED_region_tag_redraw(vod->ar);
+
+		viewops_data_free(C, op);
 
 		return OPERATOR_FINISHED;
 	}
@@ -1296,7 +1419,6 @@ void VIEW3D_OT_ndof_orbit(struct wmOperatorType *ot)
 	ot->flag = 0;
 }
 
-
 static int ndof_orbit_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	
@@ -1305,75 +1427,48 @@ static int ndof_orbit_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 	}
 	else {
 		ViewOpsData *vod;
-		View3D *v3d = CTX_wm_view3d(C);
-		RegionView3D *rv3d = CTX_wm_region_view3d(C);
+		View3D *v3d;
+		RegionView3D *rv3d;
+
 		wmNDOFMotionData *ndof = (wmNDOFMotionData *) event->customdata;
-
-		ED_view3d_camera_lock_init(v3d, rv3d);
-
-		rv3d->rot_angle = 0.f; /* off by default, until changed later this function */
 
 		viewops_data_alloc(C, op);
 		viewops_data_create(C, op, event);
+
 		vod = op->customdata;
+		v3d = vod->v3d;
+		rv3d = vod->rv3d;
+
+		ED_view3d_camera_lock_init(v3d, rv3d);
+
+		/* off by default, until changed later this function */
+		rv3d->rot_angle = 0.0f;
 
 		if (ndof->progress != P_FINISHING) {
-			const float dt = ndof->dt;
-
-			/* tune these until everything feels right */
-			const float rot_sensitivity = 1.f;
-
-			const float zoom_sensitivity = 1.f;
-
-			const float pan_sensitivity = 1.f;
-			const bool has_rotation = ((rv3d->viewlock & RV3D_LOCKED) == 0) && !is_zero_v3(ndof->rvec);
-
-			float view_inv[4];
-			invert_qt_qt(view_inv, rv3d->viewquat);
+			const bool has_rotation = NDOF_HAS_ROTATE;
+			/* if we can't rotate, fallback to translate (locked axis views) */
+			const bool has_translate = NDOF_HAS_TRANSLATE && (rv3d->viewlock & RV3D_LOCKED);
+			/* always zoom since this is the main purpose of the function */
+			const bool has_zoom = true;
 
 #ifdef DEBUG_NDOF_MOTION
 			printf("ndof: T=(%.2f,%.2f,%.2f) R=(%.2f,%.2f,%.2f) dt=%.3f delivered to 3D view\n",
 			       ndof->tx, ndof->ty, ndof->tz, ndof->rx, ndof->ry, ndof->rz, ndof->dt);
 #endif
-
-			if (ndof->tz) {
-				/* Zoom!
-				 * velocity should be proportional to the linear velocity attained by rotational motion of same strength
-				 * [got that?]
-				 * proportional to arclength = radius * angle
-				 */
-				float zoom_distance = zoom_sensitivity * rv3d->dist * dt * ndof->tz;
-
-				if (U.ndof_flag & NDOF_ZOOM_INVERT)
-					zoom_distance = -zoom_distance;
-
-				rv3d->dist += zoom_distance;
-			}
-			
-			if (rv3d->viewlock & RV3D_LOCKED) {
-				/* rotation not allowed -- explore panning options instead */
-				float pan_vec[3] = {ndof->tx, ndof->ty, 0.0f};
-				mul_v3_fl(pan_vec, pan_sensitivity * rv3d->dist * dt);
-
-				/* transform motion from view to world coordinates */
-				invert_qt_qt(view_inv, rv3d->viewquat);
-				mul_qt_v3(view_inv, pan_vec);
-
-				/* move center of view opposite of hand motion (this is camera mode, not object mode) */
-				sub_v3_v3(rv3d->ofs, pan_vec);
+			if (has_translate || has_zoom) {
+				view3d_ndof_pan_zoom(ndof, vod->sa, vod->ar, has_translate, true);
 			}
 
 			if (has_rotation) {
-				rv3d->view = RV3D_VIEW_USER;
-				view3d_ndof_orbit(ndof, rv3d, view_inv, rot_sensitivity, dt, vod);
+				view3d_ndof_orbit(ndof, rv3d, ndof->dt, vod);
 			}
 		}
 
-		viewops_data_free(C, op);
-		
 		ED_view3d_camera_lock_sync(v3d, rv3d);
 
-		ED_region_tag_redraw(CTX_wm_region(C));
+		ED_region_tag_redraw(vod->ar);
+
+		viewops_data_free(C, op);
 
 		return OPERATOR_FINISHED;
 	}
@@ -1407,7 +1502,10 @@ static int ndof_pan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		RegionView3D *rv3d = CTX_wm_region_view3d(C);
 		wmNDOFMotionData *ndof = (wmNDOFMotionData *) event->customdata;
 
-		if (view3d_operator_offset_lock_check(C, op))
+		const bool has_translate = NDOF_HAS_TRANSLATE;
+		const bool has_zoom = !rv3d->is_persp;
+
+		if (has_translate == false)
 			return OPERATOR_CANCELLED;
 
 		ED_view3d_camera_lock_init(v3d, rv3d);
@@ -1415,57 +1513,12 @@ static int ndof_pan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		rv3d->rot_angle = 0.f; /* we're panning here! so erase any leftover rotation from other operators */
 
 		if (ndof->progress != P_FINISHING) {
-			const float dt = ndof->dt;
-			float view_inv[4];
-#if 0 /* ------------------------------------------- zoom with Z */
-			/* tune these until everything feels right */
-			const float zoom_sensitivity = 1.f;
-			const float pan_sensitivity = 1.f;
+			ScrArea *sa = CTX_wm_area(C);
+			ARegion *ar = CTX_wm_region(C);
 
-			float pan_vec[3] = {
-				ndof->tx, ndof->ty, 0
-			};
-
-			/* "zoom in" or "translate"? depends on zoom mode in user settings? */
-			if (ndof->tz) {
-				float zoom_distance = zoom_sensitivity * rv3d->dist * dt * ndof->tz;
-				rv3d->dist += zoom_distance;
+			if (has_translate || has_zoom) {
+				view3d_ndof_pan_zoom(ndof, sa, ar, has_translate, has_zoom);
 			}
-
-			mul_v3_fl(pan_vec, pan_sensitivity * rv3d->dist * dt);
-#else /* ------------------------------------------------------- dolly with Z */
-			float speed = rv3d->dist; /* uses distance from pivot to define dolly */
-
-			/* tune these until everything feels right */
-			const float forward_sensitivity = 1.f;
-			const float vertical_sensitivity = 0.4f;
-			const float lateral_sensitivity = 0.6f;
-
-			float pan_vec[3];
-
-			if (U.ndof_flag & NDOF_PANX_INVERT_AXIS)
-				pan_vec[0] = -lateral_sensitivity * ndof->tvec[0];
-			else
-				pan_vec[0] = lateral_sensitivity * ndof->tvec[0];
-
-			if (U.ndof_flag & NDOF_PANZ_INVERT_AXIS)
-				pan_vec[1] = -vertical_sensitivity * ndof->tvec[1];
-			else
-				pan_vec[1] = vertical_sensitivity * ndof->tvec[1];
-
-			if (U.ndof_flag & NDOF_PANY_INVERT_AXIS)
-				pan_vec[2] = -forward_sensitivity * ndof->tvec[2];
-			else
-				pan_vec[2] = forward_sensitivity * ndof->tvec[2];
-
-			mul_v3_fl(pan_vec, speed * dt);
-#endif
-			/* transform motion from view to world coordinates */
-			invert_qt_qt(view_inv, rv3d->viewquat);
-			mul_qt_v3(view_inv, pan_vec);
-
-			/* move center of view opposite of hand motion (this is camera mode, not object mode) */
-			sub_v3_v3(rv3d->ofs, pan_vec);
 		}
 
 		ED_view3d_camera_lock_sync(v3d, rv3d);
@@ -1502,66 +1555,39 @@ static int ndof_all_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 	else {
 		ViewOpsData *vod;
+		View3D *v3d;
 		RegionView3D *rv3d;
 		
-		View3D *v3d = CTX_wm_view3d(C);
 		wmNDOFMotionData *ndof = (wmNDOFMotionData *) event->customdata;
 
 		viewops_data_alloc(C, op);
 		viewops_data_create(C, op, event);
+
 		vod = op->customdata;
+		v3d = vod->v3d;
 		rv3d = vod->rv3d;
 
 		ED_view3d_camera_lock_init(v3d, rv3d);
 
 		if (ndof->progress != P_FINISHING) {
+			const bool has_rotation = NDOF_HAS_ROTATE;
+			const bool has_translate = NDOF_HAS_TRANSLATE;
+			const bool has_zoom = !rv3d->is_persp;
 
-			const float dt = ndof->dt;
-			float view_inv[4];
+			if (has_translate || has_zoom) {
+				view3d_ndof_pan_zoom(ndof, vod->sa, vod->ar, has_translate, has_zoom);
+			}
 
-			float speed = rv3d->dist; /* uses distance from pivot to define dolly */
-
-			/* tune these until everything feels right */
-			const float forward_sensitivity = 1.f;
-			const float vertical_sensitivity = 0.4f;
-			const float lateral_sensitivity = 0.6f;
-			float pan_vec[3];
-			const float rot_sensitivity = 1.f;
-
-			/* inverse view */
-			invert_qt_qt(view_inv, rv3d->viewquat);
-			
-			if (U.ndof_flag & NDOF_PANX_INVERT_AXIS)
-				pan_vec[0] = -lateral_sensitivity * ndof->tvec[0];
-			else
-				pan_vec[0] = lateral_sensitivity * ndof->tvec[0];
-
-			if (U.ndof_flag & NDOF_PANZ_INVERT_AXIS)
-				pan_vec[1] = -vertical_sensitivity * ndof->tvec[1];
-			else
-				pan_vec[1] = vertical_sensitivity * ndof->tvec[1];
-
-			if (U.ndof_flag & NDOF_PANY_INVERT_AXIS)
-				pan_vec[2] = -forward_sensitivity * ndof->tvec[2];
-			else
-				pan_vec[2] = forward_sensitivity * ndof->tvec[2];
-
-			mul_v3_fl(pan_vec, speed * dt);
-
-			/* transform motion from view to world coordinates */
-			mul_qt_v3(view_inv, pan_vec);
-
-			/* move center of view opposite of hand motion (this is camera mode, not object mode) */
-			sub_v3_v3(rv3d->ofs, pan_vec);
-
-			view3d_ndof_orbit(ndof, rv3d, view_inv, rot_sensitivity, dt, vod);
+			if (has_rotation) {
+				view3d_ndof_orbit(ndof, rv3d, ndof->dt, vod);
+			}
 		}
-		
-		viewops_data_free(C, op);
-		
+
 		ED_view3d_camera_lock_sync(v3d, rv3d);
 
-		ED_region_tag_redraw(CTX_wm_region(C));
+		ED_region_tag_redraw(vod->ar);
+
+		viewops_data_free(C, op);
 		
 		return OPERATOR_FINISHED;
 	}
@@ -2335,7 +2361,7 @@ static int viewdolly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	vod = op->customdata;
 
 	/* poll should check but in some cases fails, see poll func for details */
-	if (ED_view3d_view_lock_check(vod->v3d, vod->rv3d)) {
+	if (vod->rv3d->viewlock & RV3D_LOCKED) {
 		viewops_data_free(C, op);
 		return OPERATOR_PASS_THROUGH;
 	}
@@ -3364,16 +3390,14 @@ static EnumPropertyItem prop_view_items[] = {
 /* would like to make this a generic function - outside of transform */
 
 static void axis_set_view(bContext *C, View3D *v3d, ARegion *ar,
-                          float q1, float q2, float q3, float q4,
+                          const float quat_[4],
                           short view, int perspo, bool align_active,
                           const int smooth_viewtx)
 {
 	RegionView3D *rv3d = ar->regiondata; /* no NULL check is needed, poll checks */
-	float new_quat[4];
+	float quat[4];
 
-	new_quat[0] = q1; new_quat[1] = q2;
-	new_quat[2] = q3; new_quat[3] = q4;
-	normalize_qt(new_quat);
+	normalize_qt_qt(quat, quat_);
 
 	if (align_active) {
 		/* align to active object */
@@ -3391,7 +3415,7 @@ static void axis_set_view(bContext *C, View3D *v3d, ARegion *ar,
 
 			mat3_to_quat(obact_quat, twmat);
 			invert_qt(obact_quat);
-			mul_qt_qtqt(new_quat, new_quat, obact_quat);
+			mul_qt_qtqt(quat, quat, obact_quat);
 
 			rv3d->view = view = RV3D_VIEW_USER;
 		}
@@ -3431,12 +3455,12 @@ static void axis_set_view(bContext *C, View3D *v3d, ARegion *ar,
 
 	if (rv3d->persp == RV3D_CAMOB && v3d->camera) {
 		ED_view3d_smooth_view(C, v3d, ar, v3d->camera, NULL,
-		                      rv3d->ofs, new_quat, NULL, NULL,
+		                      rv3d->ofs, quat, NULL, NULL,
 		                      smooth_viewtx);
 	}
 	else {
 		ED_view3d_smooth_view(C, v3d, ar, NULL, NULL,
-		                      NULL, new_quat, NULL, NULL,
+		                      NULL, quat, NULL, NULL,
 		                      smooth_viewtx);
 	}
 
@@ -3473,108 +3497,79 @@ static int viewnumpad_exec(bContext *C, wmOperator *op)
 		nextperspo = perspo;
 	}
 
-	switch (viewnum) {
-		case RV3D_VIEW_BOTTOM:
-			axis_set_view(C, v3d, ar, 0.0, -1.0, 0.0, 0.0,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
+	if (RV3D_VIEW_IS_AXIS(viewnum)) {
+		float quat[4];
 
-		case RV3D_VIEW_BACK:
-			axis_set_view(C, v3d, ar, 0.0, 0.0, -M_SQRT1_2, -M_SQRT1_2,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
+		ED_view3d_quat_from_axis_view(viewnum, quat);
+		axis_set_view(C, v3d, ar, quat, viewnum, nextperspo, align_active, smooth_viewtx);
+	}
+	else if (viewnum == RV3D_VIEW_CAMERA) {
+		if ((rv3d->viewlock & RV3D_LOCKED) == 0) {
+			/* lastview -  */
 
-		case RV3D_VIEW_LEFT:
-			axis_set_view(C, v3d, ar, 0.5, -0.5, 0.5, 0.5,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
+			if (rv3d->persp != RV3D_CAMOB) {
+				Object *ob = OBACT;
 
-		case RV3D_VIEW_TOP:
-			axis_set_view(C, v3d, ar, 1.0, 0.0, 0.0, 0.0,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
-
-		case RV3D_VIEW_FRONT:
-			axis_set_view(C, v3d, ar, M_SQRT1_2, -M_SQRT1_2, 0.0, 0.0,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
-
-		case RV3D_VIEW_RIGHT:
-			axis_set_view(C, v3d, ar, 0.5, -0.5, -0.5, -0.5,
-			              viewnum, nextperspo, align_active, smooth_viewtx);
-			break;
-
-		case RV3D_VIEW_CAMERA:
-			if ((rv3d->viewlock & RV3D_LOCKED) == 0) {
-				/* lastview -  */
-
-				if (rv3d->persp != RV3D_CAMOB) {
-					Object *ob = OBACT;
-
-					if (!rv3d->smooth_timer) {
-						/* store settings of current view before allowing overwriting with camera view
-						 * only if we're not currently in a view transition */
-						copy_qt_qt(rv3d->lviewquat, rv3d->viewquat);
-						rv3d->lview = rv3d->view;
-						rv3d->lpersp = rv3d->persp;
-					}
+				if (!rv3d->smooth_timer) {
+					/* store settings of current view before allowing overwriting with camera view
+					 * only if we're not currently in a view transition */
+					copy_qt_qt(rv3d->lviewquat, rv3d->viewquat);
+					rv3d->lview = rv3d->view;
+					rv3d->lpersp = rv3d->persp;
+				}
 
 #if 0
-					if (G.qual == LR_ALTKEY) {
-						if (oldcamera && is_an_active_object(oldcamera)) {
-							v3d->camera = oldcamera;
-						}
-						handle_view3d_lock();
+				if (G.qual == LR_ALTKEY) {
+					if (oldcamera && is_an_active_object(oldcamera)) {
+						v3d->camera = oldcamera;
 					}
+					handle_view3d_lock();
+				}
 #endif
-					
-					/* first get the default camera for the view lock type */
-					if (v3d->scenelock) {
-						/* sets the camera view if available */
-						v3d->camera = scene->camera;
-					}
-					else {
-						/* use scene camera if one is not set (even though we're unlocked) */
-						if (v3d->camera == NULL) {
-							v3d->camera = scene->camera;
-						}
-					}
 
-					/* if the camera isn't found, check a number of options */
-					if (v3d->camera == NULL && ob && ob->type == OB_CAMERA)
-						v3d->camera = ob;
-					
-					if (v3d->camera == NULL)
-						v3d->camera = BKE_scene_camera_find(scene);
-
-					/* couldnt find any useful camera, bail out */
-					if (v3d->camera == NULL)
-						return OPERATOR_CANCELLED;
-					
-					/* important these don't get out of sync for locked scenes */
-					if (v3d->scenelock)
-						scene->camera = v3d->camera;
-
-					/* finally do snazzy view zooming */
-					rv3d->persp = RV3D_CAMOB;
-					ED_view3d_smooth_view(C, v3d, ar, NULL, v3d->camera,
-					                      rv3d->ofs, rv3d->viewquat, &rv3d->dist, &v3d->lens,
-					                      smooth_viewtx);
-
+				/* first get the default camera for the view lock type */
+				if (v3d->scenelock) {
+					/* sets the camera view if available */
+					v3d->camera = scene->camera;
 				}
 				else {
-					/* return to settings of last view */
-					/* does view3d_smooth_view too */
-					axis_set_view(C, v3d, ar,
-					              rv3d->lviewquat[0], rv3d->lviewquat[1], rv3d->lviewquat[2], rv3d->lviewquat[3],
-					              rv3d->lview, rv3d->lpersp, 0,
-					              smooth_viewtx);
+					/* use scene camera if one is not set (even though we're unlocked) */
+					if (v3d->camera == NULL) {
+						v3d->camera = scene->camera;
+					}
 				}
-			}
-			break;
 
-		default:
-			break;
+				/* if the camera isn't found, check a number of options */
+				if (v3d->camera == NULL && ob && ob->type == OB_CAMERA)
+					v3d->camera = ob;
+
+				if (v3d->camera == NULL)
+					v3d->camera = BKE_scene_camera_find(scene);
+
+				/* couldnt find any useful camera, bail out */
+				if (v3d->camera == NULL)
+					return OPERATOR_CANCELLED;
+
+				/* important these don't get out of sync for locked scenes */
+				if (v3d->scenelock)
+					scene->camera = v3d->camera;
+
+				/* finally do snazzy view zooming */
+				rv3d->persp = RV3D_CAMOB;
+				ED_view3d_smooth_view(C, v3d, ar, NULL, v3d->camera,
+				                      rv3d->ofs, rv3d->viewquat, &rv3d->dist, &v3d->lens,
+				                      smooth_viewtx);
+
+			}
+			else {
+				/* return to settings of last view */
+				/* does view3d_smooth_view too */
+				axis_set_view(C, v3d, ar,
+				              rv3d->lviewquat,
+				              rv3d->lview, rv3d->lpersp, 0,
+				              smooth_viewtx);
+			}
+		}
 	}
 
 	if (rv3d->persp != RV3D_CAMOB) perspo = rv3d->persp;

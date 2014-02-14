@@ -81,7 +81,6 @@
 #include "BKE_idprop.h"
 #include "BKE_mesh.h"
 #include "BKE_shrinkwrap.h"
-#include "BKE_mesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_tracking.h"
 #include "BKE_movieclip.h"
@@ -4490,7 +4489,7 @@ void BKE_copy_constraints(ListBase *dst, const ListBase *src, int do_extern)
 {
 	bConstraint *con, *srccon;
 	
-	dst->first = dst->last = NULL;
+	BLI_listbase_clear(dst);
 	BLI_duplicatelist(dst, src);
 	
 	for (con = dst->first, srccon = src->first; con && srccon; srccon = srccon->next, con = con->next) {

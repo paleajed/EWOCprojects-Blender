@@ -1654,8 +1654,7 @@ static void ui_item_menu(uiLayout *layout, const char *name, int icon, uiMenuCre
 	if (ELEM(layout->root->type, UI_LAYOUT_PANEL, UI_LAYOUT_TOOLBAR) ||
 	    (force_menu && layout->root->type != UI_LAYOUT_MENU))  /* We never want a dropdown in menu! */
 	{
-		but->type = MENU;
-		but->drawflag |= UI_BUT_TEXT_LEFT;
+		uiButSetMenuFromPulldown(but);
 	}
 }
 
@@ -1794,6 +1793,9 @@ static void menu_item_enum_opname_menu(bContext *UNUSED(C), uiLayout *layout, vo
 
 	uiLayoutSetOperatorContext(layout, lvl->opcontext);
 	uiItemsEnumO(layout, lvl->opname, lvl->propname);
+
+	/* override default, needed since this was assumed pre 2.70 */
+	uiBlockSetDirection(layout->root->block, UI_DOWN);
 }
 
 void uiItemMenuEnumO(uiLayout *layout, bContext *C, const char *opname, const char *propname, const char *name, int icon)
@@ -2703,7 +2705,7 @@ static void ui_item_estimate(uiItem *item)
 		for (subitem = litem->items.first; subitem; subitem = subitem->next)
 			ui_item_estimate(subitem);
 
-		if (litem->items.first == NULL)
+		if (BLI_listbase_is_empty(&litem->items))
 			return;
 
 		if (litem->scale[0] != 0.0f || litem->scale[1] != 0.0f)
@@ -2793,7 +2795,7 @@ static void ui_item_layout(uiItem *item)
 	if (item->type != ITEM_BUTTON) {
 		uiLayout *litem = (uiLayout *)item;
 
-		if (litem->items.first == NULL)
+		if (BLI_listbase_is_empty(&litem->items))
 			return;
 
 		if (litem->align)

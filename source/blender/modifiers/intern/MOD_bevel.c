@@ -181,6 +181,11 @@ static DerivedMesh *applyModifier(ModifierData *md, struct Object *ob,
 	return result;
 }
 
+static bool dependsOnNormals(ModifierData *UNUSED(md))
+{
+	return true;
+}
+
 ModifierTypeInfo modifierType_Bevel = {
 	/* name */              "Bevel",
 	/* structName */        "BevelModifierData",
@@ -203,7 +208,7 @@ ModifierTypeInfo modifierType_Bevel = {
 	/* isDisabled */        NULL,
 	/* updateDepgraph */    NULL,
 	/* dependsOnTime */     NULL,
-	/* dependsOnNormals */  NULL,
+	/* dependsOnNormals */  dependsOnNormals,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
