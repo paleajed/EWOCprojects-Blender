@@ -24,6 +24,7 @@ set(INC
 	../../blenkernel
 	../../blenlib
 	../../bmesh
+	../../editors/transform
 	../../gpu
 	../../ikplugin
 	../../imbuf

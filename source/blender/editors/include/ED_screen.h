@@ -174,7 +174,7 @@ int     ED_operator_posemode_exclusive(struct bContext *C);
 int     ED_operator_posemode_context(struct bContext *C);
 int     ED_operator_posemode(struct bContext *C);
 int     ED_operator_mask(struct bContext *C);
-
+int		ED_operator_view3d_presel_active(struct bContext *C);
 
 /* default keymaps, bitflags */
 #define ED_KEYMAP_UI        1

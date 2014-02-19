@@ -1456,6 +1456,8 @@ static void createTransCurveVerts(TransInfo *t)
 					    ((bezt->f2 & SELECT) && hide_handles) ||
 					    ((bezt->f1 & SELECT) && hide_handles == 0))
 					{
+						td->bezt = bezt;
+					
 						copy_v3_v3(td->iloc, bezt->vec[0]);
 						td->loc = bezt->vec[0];
 						copy_v3_v3(td->center, bezt->vec[(hide_handles ||
@@ -1487,6 +1489,8 @@ static void createTransCurveVerts(TransInfo *t)
 
 					/* This is the Curve Point, the other two are handles */
 					if (propmode || (bezt->f2 & SELECT)) {
+						td->bezt = bezt;
+					
 						copy_v3_v3(td->iloc, bezt->vec[1]);
 						td->loc = bezt->vec[1];
 						copy_v3_v3(td->center, td->loc);
@@ -1526,6 +1530,8 @@ static void createTransCurveVerts(TransInfo *t)
 					    ((bezt->f2 & SELECT) && hide_handles) ||
 					    ((bezt->f3 & SELECT) && hide_handles == 0))
 					{
+						td->bezt = bezt;
+					
 						copy_v3_v3(td->iloc, bezt->vec[2]);
 						td->loc = bezt->vec[2];
 						copy_v3_v3(td->center, bezt->vec[(hide_handles ||
@@ -1580,6 +1586,8 @@ static void createTransCurveVerts(TransInfo *t)
 			for (a = nu->pntsu * nu->pntsv, bp = nu->bp; a > 0; a--, bp++) {
 				if (bp->hide == 0) {
 					if (propmode || (bp->f1 & SELECT)) {
+						td->bp = bp;
+					
 						copy_v3_v3(td->iloc, bp->vec);
 						td->loc = bp->vec;
 						copy_v3_v3(td->center, td->loc);
@@ -1653,6 +1661,8 @@ static void createTransLatticeVerts(TransInfo *t)
 	while (a--) {
 		if (propmode || (bp->f1 & SELECT)) {
 			if (bp->hide == 0) {
+				td->bp = bp;
+			
 				copy_v3_v3(td->iloc, bp->vec);
 				td->loc = bp->vec;
 				copy_v3_v3(td->center, td->loc);

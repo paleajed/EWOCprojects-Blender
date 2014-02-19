@@ -550,6 +550,16 @@ int ED_operator_mask(bContext *C)
 	return FALSE;
 }
 
+int ED_operator_view3d_presel_active(bContext *C)
+{
+	return (CTX_data_tool_settings(C)->use_presel && ed_spacetype_test(C, SPACE_VIEW3D));
+}
+
+int ED_operator_uv_presel_active(bContext *C)
+{
+	return (CTX_data_tool_settings(C)->use_presel && ed_spacetype_test(C, SPACE_IMAGE));
+}
+
 /* *************************** action zone operator ************************** */
 
 /* operator state vars used:  

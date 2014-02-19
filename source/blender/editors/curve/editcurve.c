@@ -77,6 +77,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "transform.h"
+
 /* Undo stuff */
 typedef struct {
 	ListBase nubase;
@@ -136,6 +138,9 @@ static bool select_beztriple(BezTriple *bezt, bool selstatus, short flag, eVisib
 			bezt->f3 |= flag;
 			return true;
 		}
+		else if (selstatus == PRESELECT) { /* preselects */
+			bezt->f2 |= flag;
+		}
 		else { /* deselects */
 			bezt->f1 &= ~flag;
 			bezt->f2 &= ~flag;
@@ -154,6 +159,9 @@ static bool select_bpoint(BPoint *bp, bool selstatus, short flag, bool hidden)
 		if (selstatus == SELECT) {
 			bp->f1 |= flag;
 			return true;
+		}
+		else if (selstatus == PRESELECT) { /* preselects */
+			bp->f1 |= flag;
 		}
 		else {
 			bp->f1 &= ~flag;
@@ -3620,7 +3628,7 @@ static short findnearestNurbvert(ViewContext *vc, short sel, const int mval[2], 
 	data.mval_fl[1] = mval[1];
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
-	nurbs_foreachScreenVert(vc, findnearestNurbvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	nurbs_foreachScreenVert(vc, findnearestNurbvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT, false);
 
 	*nurb = data.nurb;
 	*bezt = data.bezt;
@@ -4414,7 +4422,7 @@ void CURVE_OT_make_segment(wmOperatorType *ot)
 
 /***************** pick select from 3d view **********************/
 
-bool mouse_nurb(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
+bool mouse_nurb(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool presel)
 {
 	Object *obedit = CTX_data_edit_object(C);
 	Curve *cu = obedit->data;
@@ -4425,6 +4433,7 @@ bool mouse_nurb(bContext *C, const int mval[2], bool extend, bool deselect, bool
 	BPoint *bp = NULL;
 	const void *vert = BKE_curve_vert_active_get(cu);
 	int location[2];
+	int i;
 	short hand;
 	
 	view3d_operator_needs_opengl(C);
@@ -4435,7 +4444,32 @@ bool mouse_nurb(bContext *C, const int mval[2], bool extend, bool deselect, bool
 	hand = findnearestNurbvert(&vc, 1, location, &nu, &bezt, &bp);
 
 	if (bezt || bp) {
-		if (extend) {
+		if (presel) {
+			if (bezt) {
+				for (i = 0; i < nu->pntsu; i++) {
+					nu->bezt[i].f1 &= ~PRESELECT;
+					nu->bezt[i].f2 &= ~PRESELECT;
+					nu->bezt[i].f3 &= ~PRESELECT;
+				}
+				if (hand == 1) {
+					for (i = 0; i < nu->pntsu; i++) {
+						nu->bezt[i].f2 &= ~PRESELECT;
+					}
+					select_beztriple(bezt, PRESELECT, PRESELECT, HIDDEN);
+				}
+				else {
+					if (hand == 0) bezt->f1 |= PRESELECT;
+					else bezt->f3 |= PRESELECT;
+				}
+			}
+			else {
+				for (i = 0; i < nu->pntsu * nu->pntsv; i++) {
+					nu->bp[i].f1 &= ~PRESELECT;
+				}
+				select_bpoint(bp, PRESELECT, PRESELECT, HIDDEN);
+			}
+		}
+		else if (extend) {
 			if (bezt) {
 				if (hand == 1) {
 					select_beztriple(bezt, SELECT, SELECT, HIDDEN);
@@ -4528,7 +4562,10 @@ bool mouse_nurb(bContext *C, const int mval[2], bool extend, bool deselect, bool
 			BKE_curve_nurb_active_set(cu, nu);
 		}
 
-		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
+		if (presel)
+			WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+		else 
+			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
 
 		return true;
 	}
@@ -6835,4 +6872,120 @@ void CURVE_OT_match_texture_space(wmOperatorType *ot)
 
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+
+
+/* -------------------- preselection --------------------------------------------- */
+
+static void curve_palpha_to_zero(ListBase *nurbs)
+{
+	Nurb *nu;
+	int i;
+	for (nu = nurbs->first; nu; nu = nu->next) {
+		if (nu->type == CU_BEZIER) {
+			for (i = 0; i < nu->pntsu; i++) {
+				nu->bezt[i].palpha = 0;
+			}
+		}
+		else {
+			for (i = 0; i < nu->pntsu * nu->pntsv; i++) {
+				nu->bp[i].palpha = 0;
+			}
+		}
+	}
+}
+
+void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+{
+	/* sets alpha for proportional preselection */
+	/* uses the transform code: to avoid much code duplication */
+	
+	/* todo mirror */
+	ToolSettings *ts = screen->scene->toolsettings;
+	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
+	TransData *td;	
+	Curve *cu;
+	Nurb *nu;
+	ListBase *nurbs;
+	int i;
+	ARegion *ar;
+	bContext *C = CTX_create();
+	
+	if (!screen->scene->obedit) {
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	cu = screen->scene->obedit->data;
+	if ((screen->scene->obedit->type != OB_CURVE) && (screen->scene->obedit->type != OB_SURF)) {
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	nurbs = BKE_curve_editNurbs_get(cu);
+	curve_palpha_to_zero(nurbs);
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	
+	for (ar = sa->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_WINDOW) {
+			t->ar = ar;
+			break;
+		}
+	}
+	
+	CTX_wm_screen_set(C, screen);
+	CTX_wm_area_set(C, sa);
+	CTX_data_scene_set(C, screen->scene);
+		
+	t->scene = screen->scene;
+	t->spacetype = sa->spacetype;
+	t->obedit = screen->scene->obedit;
+	
+	switch (ts->proportional) {
+		case PROP_EDIT_ON:
+			t->flag |= T_PROP_EDIT;
+			break;
+		case PROP_EDIT_CONNECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_CONNECTED;
+			break;
+		case PROP_EDIT_PROJECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_PROJECTED;
+			break;
+	}
+	t->prop_mode = ts->prop_mode;
+	t->prop_size = ts->proportional_size;
+	
+	createTransData(C, t);
+	calculatePropRatio(t);
+	/* Set bpoint palpha to value based on proportional factor */
+	for(i = 0; i < t->total; i++) {
+		nu = nurbs->first;
+		if (nu->type == CU_BEZIER) {
+			if (t->data[i].factor > 0) {
+				t->data[i].bezt->palpha = (char)(t->data[i].factor * 255.0);
+			}
+		}
+		else {
+			if (t->data[i].factor > 0) {
+				t->data[i].bp->palpha = (char)(t->data[i].factor * 255.0);
+			}
+		}
+	}
+	
+	CTX_free(C);
+	if (t->data) {
+		/* free data malloced per trans-data */
+		for (i = 0, td = t->data; i < t->total; i++, td++) {
+			if (td->flag & TD_BEZTRIPLE)
+				MEM_freeN(td->hdata);
+		}
+		MEM_freeN(t->data);
+	}
+	MEM_freeN(t);
+	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
 }

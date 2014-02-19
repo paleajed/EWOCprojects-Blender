@@ -56,6 +56,8 @@ struct Nurb;
 struct Object;
 struct ReportList;
 struct Scene;
+struct bScreen;
+struct ScrArea;
 struct View3D;
 struct ViewContext;
 struct bConstraint;
@@ -66,6 +68,7 @@ struct wmKeyConfig;
 struct wmKeyMap;
 struct wmOperator;
 struct wmOperatorType;
+struct wmWindowManager;
 struct PointerRNA;
 struct PropertyRNA;
 struct EnumPropertyItem;
@@ -172,8 +175,10 @@ void ED_object_constraint_update(struct Object *ob);
 void ED_object_constraint_dependency_update(struct Main *bmain, struct Object *ob);
 
 /* object_lattice.c */
-bool mouse_lattice(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
+bool mouse_lattice(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool presel);
 void undo_push_lattice(struct bContext *C, const char *name);
+void lattice_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force);
+void objects_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force);
 
 /* object_lattice.c */
 
@@ -221,6 +226,11 @@ struct EnumPropertyItem *ED_object_vgroup_selection_itemf_helper(
         const unsigned int selection_mask);
 
 void ED_object_check_force_modifiers(struct Main *bmain, struct Scene *scene, struct Object *object);
+
+
+/* used for curve and lattice preselection */
+#define PRESELECT		2
+
 
 #ifdef __cplusplus
 }

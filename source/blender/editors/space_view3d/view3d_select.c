@@ -621,7 +621,7 @@ static void do_lasso_select_curve(ViewContext *vc, const int mcords[][2], short 
 		ED_curve_deselect_all(vc->obedit->data);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	nurbs_foreachScreenVert(vc, do_lasso_select_curve__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	nurbs_foreachScreenVert(vc, do_lasso_select_curve__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, false);
 	BKE_curve_nurb_vert_active_validate(vc->obedit->data);
 }
 
@@ -648,7 +648,7 @@ static void do_lasso_select_lattice(ViewContext *vc, const int mcords[][2], shor
 		ED_setflagsLatt(vc->obedit, 0);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	lattice_foreachScreenVert(vc, do_lasso_select_lattice__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	lattice_foreachScreenVert(vc, do_lasso_select_lattice__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, false);
 }
 
 static void do_lasso_select_armature__doSelectBone(void *userData, struct EditBone *ebone, const float screen_co_a[2], const float screen_co_b[2])
@@ -1421,7 +1421,7 @@ static void deselect_all_tracks(MovieTracking *tracking)
 
 /* mval is region coords */
 static bool mouse_select(bContext *C, const int mval[2],
-                         bool extend, bool deselect, bool toggle, bool obcenter, bool enumerate, bool object)
+                         bool extend, bool deselect, bool toggle, bool obcenter, bool enumerate, bool object, bool presel)
 {
 	ViewContext vc;
 	ARegion *ar = CTX_wm_region(C);
@@ -1583,11 +1583,34 @@ static bool mouse_select(bContext *C, const int mval[2],
 		}
 	}
 	
+	if (presel) {
+		if (BLI_countlist(&v3d->preselobs) > 0)
+			BLI_freelistN(&v3d->preselobs);
+			retval = true;
+	}
 	/* so, do we have something selected? */
 	if (basact) {
 		retval = true;
 		
-		if (vc.obedit) {
+		if (presel) {
+			Base *biter;
+			bool found = 0;
+			
+			for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+				if (biter->object == base->object) {
+					found = 1;
+					break;
+				}
+			}
+			if (!found) {
+				Base *b = MEM_callocN(sizeof(Base), "Preselection base");
+				b->object = basact->object;
+				BLI_addtail(&v3d->preselobs, b);
+				WM_event_add_notifier(C, NC_SCENE | ND_OB_PRESELECT, scene);
+			}
+			return retval;
+		}
+		else if (vc.obedit) {
 			/* only do select */
 			deselectall_except(scene, basact);
 			ED_base_object_select(basact, BA_SELECT);
@@ -1624,6 +1647,9 @@ static bool mouse_select(bContext *C, const int mval[2],
 		}
 
 		WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+	}
+	if (presel && retval) {
+		WM_event_add_notifier(C, NC_SCENE | ND_OB_PRESELECT, scene);
 	}
 
 	return retval;
@@ -1749,36 +1775,62 @@ static int do_paintvert_box_select(ViewContext *vc, rcti *rect, bool select, boo
 	return OPERATOR_FINISHED;
 }
 
-static void do_nurbs_box_select__doSelect(void *userData, Nurb *UNUSED(nu), BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co[2])
+static void do_nurbs_box_select__doSelect(void *userData, Nurb *UNUSED(nu), BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co[2], bool presel)
 {
 	BoxSelectUserData *data = userData;
 	Object *obedit = data->vc->obedit;
 	Curve *cu = (Curve *)obedit->data;
 
+	if (bp) {
+		bp->f1 &= ~PRESELECT;
+	}
+	else {
+		if (beztindex == 0) bezt->f1 &= ~PRESELECT;
+		if (beztindex == 1) bezt->f2 &= ~PRESELECT;
+		if (beztindex == 2) bezt->f3 &= ~PRESELECT;
+	}
+
 	if (BLI_rctf_isect_pt_v(data->rect_fl, screen_co)) {
 		if (bp) {
-			bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+			if (!presel) {
+				bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+			}
+			else {
+				bp->f1 |= PRESELECT;
+			}
 		}
 		else {
 			if (cu->drawflag & CU_HIDE_HANDLES) {
-				/* can only be (beztindex == 0) here since handles are hidden */
-				bezt->f1 = bezt->f2 = bezt->f3 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				/* can only be (beztindex == 1) here since handles are hidden */
+				if (!presel)
+					bezt->f1 = bezt->f2 = bezt->f3 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				else
+					bezt->f2 |= PRESELECT;
 			}
 			else {
 				if (beztindex == 0) {
-					bezt->f1 = data->select ? (bezt->f1 | SELECT) : (bezt->f1 & ~SELECT);
+					if (!presel)
+						bezt->f1 = data->select ? (bezt->f1 | SELECT) : (bezt->f1 & ~SELECT);
+					else
+						bezt->f1 |= PRESELECT;
 				}
-				else if (beztindex == 1) {
-					bezt->f2 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				if (beztindex == 1) {
+					if (!presel)
+						bezt->f2 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+					else
+						bezt->f2 |= PRESELECT;
 				}
-				else {
-					bezt->f3 = data->select ? (bezt->f3 | SELECT) : (bezt->f3 & ~SELECT);
+				if (beztindex == 2) {
+					if (!presel)
+						bezt->f3 = data->select ? (bezt->f3 | SELECT) : (bezt->f3 & ~SELECT);
+					else
+						bezt->f3 |= PRESELECT;
 				}
 			}
 		}
 	}
 }
-static int do_nurbs_box_select(ViewContext *vc, rcti *rect, bool select, bool extend)
+static int do_nurbs_box_select(ViewContext *vc, rcti *rect, bool select, bool extend, bool presel)
 {
 	BoxSelectUserData data;
 	
@@ -1788,21 +1840,27 @@ static int do_nurbs_box_select(ViewContext *vc, rcti *rect, bool select, bool ex
 		ED_curve_deselect_all(vc->obedit->data);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	nurbs_foreachScreenVert(vc, do_nurbs_box_select__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	nurbs_foreachScreenVert(vc, do_nurbs_box_select__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, presel);
 	BKE_curve_nurb_vert_active_validate(vc->obedit->data);
 
 	return OPERATOR_FINISHED;
 }
 
-static void do_lattice_box_select__doSelect(void *userData, BPoint *bp, const float screen_co[2])
+static void do_lattice_box_select__doSelect(void *userData, BPoint *bp, const float screen_co[2], bool presel)
 {
 	BoxSelectUserData *data = userData;
 
 	if (BLI_rctf_isect_pt_v(data->rect_fl, screen_co)) {
-		bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+		if (!presel)
+			bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+		else
+			bp->f1 |= PRESELECT;
+	}
+	else {
+		bp->f1 &= ~PRESELECT;
 	}
 }
-static int do_lattice_box_select(ViewContext *vc, rcti *rect, bool select, bool extend)
+static int do_lattice_box_select(ViewContext *vc, rcti *rect, bool select, bool extend, bool presel)
 {
 	BoxSelectUserData data;
 
@@ -1812,7 +1870,7 @@ static int do_lattice_box_select(ViewContext *vc, rcti *rect, bool select, bool 
 		ED_setflagsLatt(vc->obedit, 0);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	lattice_foreachScreenVert(vc, do_lattice_box_select__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	lattice_foreachScreenVert(vc, do_lattice_box_select__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, presel);
 	
 	return OPERATOR_FINISHED;
 }
@@ -2082,7 +2140,7 @@ static int do_armature_box_select(ViewContext *vc, rcti *rect, bool select, bool
 	return OPERATOR_CANCELLED;
 }
 
-static int do_object_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, bool select, bool extend)
+static int do_object_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, bool select, bool extend, bool presel)
 {
 	Bone *bone;
 	Object *ob = vc->obact;
@@ -2092,13 +2150,14 @@ static int do_object_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, b
 	int bone_selected = 0;
 	int totobj = MAXPICKBUF; /* XXX solve later */
 	short hits;
+	bool changed;
 	
 	if ((ob) && (ob->mode & OB_MODE_POSE))
 		bone_only = 1;
 	else
 		bone_only = 0;
-	
-	if (extend == false && select) {
+		
+	if (extend == false && select && (!presel)) {
 		if (bone_only) {
 			CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones)
 			{
@@ -2132,10 +2191,33 @@ static int do_object_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, b
 		Base *base;
 		col = vbuffer + 3;
 		
+		if (presel) {	/* preselection clear object list */
+			if (BLI_countlist(&vc->v3d->preselobs) > 0) {
+				BLI_freelistN(&vc->v3d->preselobs);
+				changed = true;
+			}
+		}
 		for (base = vc->scene->base.first; base && hits; base = base->next) {
 			if (BASE_SELECTABLE(vc->v3d, base)) {
 				while (base->selcol == (*col & 0xFFFF)) {   /* we got an object */
-					if (*col & 0xFFFF0000) {                    /* we got a bone */
+					if (presel) {
+						Base *biter;
+						bool found = false;
+				
+						for (biter = (&vc->v3d->preselobs)->first; biter; biter = biter->next) {
+							if (biter->object == base->object) {
+								found = true;
+								break;
+							}
+						}
+						if (!found) {
+							Base *b = MEM_callocN(sizeof(Base), "Preselection base");
+							b->object = base->object;
+							BLI_addtail(&vc->v3d->preselobs, b);
+							changed = true;
+						}
+					}
+					else if (*col & 0xFFFF0000) {                    /* we got a bone */
 						bone = get_indexed_bone(base->object, *col & ~(BONESEL_ANY));
 						if (bone) {
 							if (select) {
@@ -2176,7 +2258,14 @@ static int do_object_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, b
 			}
 		}
 		
-		WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, vc->scene);
+		if (presel) {
+			if (changed) {
+				WM_event_add_notifier(C, NC_SCENE | ND_OB_PRESELECT, vc->scene);
+			}
+		}
+		else {
+			WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, vc->scene);
+		}
 	}
 	MEM_freeN(vbuffer);
 
@@ -2220,7 +2309,7 @@ static int view3d_borderselect_exec(bContext *C, wmOperator *op)
 				break;
 			case OB_CURVE:
 			case OB_SURF:
-				ret = do_nurbs_box_select(&vc, &rect, select, extend);
+				ret = do_nurbs_box_select(&vc, &rect, select, extend, presel);
 				if (ret & OPERATOR_FINISHED) {
 					WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
 				}
@@ -2238,9 +2327,12 @@ static int view3d_borderselect_exec(bContext *C, wmOperator *op)
 				}
 				break;
 			case OB_LATTICE:
-				ret = do_lattice_box_select(&vc, &rect, select, extend);
+				ret = do_lattice_box_select(&vc, &rect, select, extend, presel);
 				if (ret & OPERATOR_FINISHED) {
-					WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
+					if (presel)
+						WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, vc.obedit->data);
+					else
+						WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
 				}
 				break;
 			default:
@@ -2261,8 +2353,8 @@ static int view3d_borderselect_exec(bContext *C, wmOperator *op)
 		else if (vc.obact && vc.obact->mode & OB_MODE_PARTICLE_EDIT) {
 			ret = PE_border_select(C, &rect, select, extend);
 		}
-		else { /* object mode with none active */
-			ret = do_object_pose_box_select(C, &vc, &rect, select, extend);
+		else {
+			ret = do_object_pose_box_select(C, &vc, &rect, select, extend, presel);
 		}
 	}
 
@@ -2383,9 +2475,9 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 		else if (obedit->type == OB_ARMATURE)
 			retval = mouse_armature(C, location, extend, deselect, toggle);
 		else if (obedit->type == OB_LATTICE)
-			retval = mouse_lattice(C, location, extend, deselect, toggle);
+			retval = mouse_lattice(C, location, extend, deselect, toggle, presel);
 		else if (ELEM(obedit->type, OB_CURVE, OB_SURF))
-			retval = mouse_nurb(C, location, extend, deselect, toggle);
+			retval = mouse_nurb(C, location, extend, deselect, toggle, presel);
 		else if (obedit->type == OB_MBALL)
 			retval = mouse_mball(C, location, extend, deselect, toggle);
 			
@@ -2399,7 +2491,7 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 	else if (paint_vertsel_test(obact))
 		retval = mouse_weight_paint_vertex_select(C, location, extend, deselect, toggle, obact);
 	else
-		retval = mouse_select(C, location, extend, deselect, toggle, center, enumerate, object);
+		retval = mouse_select(C, location, extend, deselect, toggle, center, enumerate, object, presel);
 
 	/* passthrough allows tweaks
 	 * FINISHED to signal one operator worked
@@ -2461,7 +2553,7 @@ void VIEW3D_OT_preselect(wmOperatorType *ot)
 	/* api callbacks */
 	ot->invoke = view3d_select_invoke;
 	ot->exec = view3d_select_exec;
-	ot->poll = ED_operator_editmesh_region_view3d;
+	ot->poll = ED_operator_view3d_presel_active;
 	
 	/* flags */
 	
@@ -2698,63 +2790,97 @@ static void paint_vertsel_circle_select(ViewContext *vc, const bool select, cons
 }
 
 
-static void nurbscurve_circle_doSelect(void *userData, Nurb *UNUSED(nu), BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co[2])
+static void nurbscurve_circle_doSelect(void *userData, Nurb *UNUSED(nu), BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co[2], bool presel)
 {
 	CircleSelectUserData *data = userData;
 	Object *obedit = data->vc->obedit;
 	Curve *cu = (Curve *)obedit->data;
+	
+	if (bp) {
+		bp->f1 &= ~PRESELECT;
+	}
+	else {
+		if (beztindex == 0) bezt->f1 &= ~PRESELECT;
+		if (beztindex == 1) bezt->f2 &= ~PRESELECT;
+		if (beztindex == 2) bezt->f3 &= ~PRESELECT;
+	}
 
 	if (len_squared_v2v2(data->mval_fl, screen_co) <= data->radius_squared) {
 		if (bp) {
-			bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+			if (!presel) {
+				bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+			}
+			else {
+				bp->f1 |= PRESELECT;
+			}
 		}
 		else {
 			if (cu->drawflag & CU_HIDE_HANDLES) {
-				/* can only be (beztindex == 0) here since handles are hidden */
-				bezt->f1 = bezt->f2 = bezt->f3 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				/* can only be (beztindex == 1) here since handles are hidden */
+				if (!presel)
+					bezt->f1 = bezt->f2 = bezt->f3 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				else
+					bezt->f2 |= PRESELECT;
 			}
 			else {
 				if (beztindex == 0) {
-					bezt->f1 = data->select ? (bezt->f1 | SELECT) : (bezt->f1 & ~SELECT);
+					if (!presel)
+						bezt->f1 = data->select ? (bezt->f1 | SELECT) : (bezt->f1 & ~SELECT);
+					else
+						bezt->f1 |= PRESELECT;
 				}
-				else if (beztindex == 1) {
-					bezt->f2 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+				if (beztindex == 1) {
+					if (!presel)
+						bezt->f2 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+					else
+						bezt->f2 |= PRESELECT;
 				}
-				else {
-					bezt->f3 = data->select ? (bezt->f3 | SELECT) : (bezt->f3 & ~SELECT);
+				if (beztindex == 2) {
+					if (!presel)
+						bezt->f3 = data->select ? (bezt->f3 | SELECT) : (bezt->f3 & ~SELECT);
+					else
+						bezt->f3 |= PRESELECT;
 				}
 			}
 		}
 	}
 }
-static void nurbscurve_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad)
+static void nurbscurve_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad, bool presel)
 {
 	CircleSelectUserData data;
 
 	view3d_data_circleselect_init(&data, vc, select, mval, rad);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	nurbs_foreachScreenVert(vc, nurbscurve_circle_doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	nurbs_foreachScreenVert(vc, nurbscurve_circle_doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, presel);
 	BKE_curve_nurb_vert_active_validate(vc->obedit->data);
 }
 
 
-static void latticecurve_circle_doSelect(void *userData, BPoint *bp, const float screen_co[2])
+static void latticecurve_circle_doSelect(void *userData, BPoint *bp, const float screen_co[2], bool presel)
 {
 	CircleSelectUserData *data = userData;
 
 	if (len_squared_v2v2(data->mval_fl, screen_co) <= data->radius_squared) {
-		bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+		if (!presel) {
+			bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+		}
+		else {
+			bp->f1 |= PRESELECT;
+		}
+	}
+	else {
+		bp->f1 &= ~PRESELECT;
 	}
 }
-static void lattice_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad)
+static void lattice_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad, bool presel)
 {
 	CircleSelectUserData data;
 
 	view3d_data_circleselect_init(&data, vc, select, mval, rad);
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
-	lattice_foreachScreenVert(vc, latticecurve_circle_doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	lattice_foreachScreenVert(vc, latticecurve_circle_doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT, presel);
 }
 
 
@@ -2950,10 +3076,10 @@ static void obedit_circle_select(ViewContext *vc, const bool select, const int m
 			break;
 		case OB_CURVE:
 		case OB_SURF:
-			nurbscurve_circle_select(vc, select, mval, rad);
+			nurbscurve_circle_select(vc, select, mval, rad, presel);
 			break;
 		case OB_LATTICE:
-			lattice_circle_select(vc, select, mval, rad);
+			lattice_circle_select(vc, select, mval, rad, presel);
 			break;
 		case OB_ARMATURE:
 			armature_circle_select(vc, select, mval, rad);
@@ -2966,7 +3092,7 @@ static void obedit_circle_select(ViewContext *vc, const bool select, const int m
 	}
 }
 
-static bool object_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad)
+static bool object_circle_select(ViewContext *vc, const bool select, const int mval[2], float rad, const bool presel)
 {
 	Scene *scene = vc->scene;
 	const float radius_squared = rad * rad;
@@ -2976,9 +3102,38 @@ static bool object_circle_select(ViewContext *vc, const bool select, const int m
 
 
 	Base *base;
+	if (presel) {
+		if (BLI_countlist(&vc->v3d->preselobs) > 0) {
+			BLI_freelistN(&vc->v3d->preselobs);
+			changed = true;
+		}
+	}
 	for (base = FIRSTBASE; base; base = base->next) {
-		if (BASE_SELECTABLE(vc->v3d, base) && ((base->flag & SELECT) != select_flag)) {
-			float screen_co[2];
+		float screen_co[2];
+		if (presel) {
+			if (ED_view3d_project_float_global(vc->ar, base->object->obmat[3], screen_co,
+			                                   V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK)
+			{
+				if (len_squared_v2v2(mval_fl, screen_co) <= radius_squared) {
+					Base *biter;
+					bool found = false;
+			
+					for (biter = (&vc->v3d->preselobs)->first; biter; biter = biter->next) {
+						if (biter->object == base->object) {
+							found = true;
+							break;
+						}
+					}
+					if (!found) {
+						Base *b = MEM_callocN(sizeof(Base), "Preselection base");
+						b->object = base->object;
+						BLI_addtail(&vc->v3d->preselobs, b);
+						changed = true;
+					}
+				}
+			}
+		}
+		else if (BASE_SELECTABLE(vc->v3d, base) && ((base->flag & SELECT) != select_flag)) {
 			if (ED_view3d_project_float_global(vc->ar, base->object->obmat[3], screen_co,
 			                                   V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK)
 			{
@@ -3004,7 +3159,7 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
 	const bool presel = (gesture_mode == GESTURE_MODAL_PRESEL);
 	const int mval[2] = {RNA_int_get(op->ptr, "x"),
 	                     RNA_int_get(op->ptr, "y")};
-
+	                     
 	if (CTX_data_edit_object(C) || paint_facesel_test(obact) || paint_vertsel_test(obact) ||
 	    (obact && (obact->mode & (OB_MODE_PARTICLE_EDIT | OB_MODE_POSE))) )
 	{
@@ -3042,9 +3197,11 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
 	else {
 		ViewContext vc;
 		view3d_set_viewcontext(C, &vc);
-
-		if (object_circle_select(&vc, select, mval, (float)radius)) {
-			WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+		if (object_circle_select(&vc, select, mval, (float)radius, presel)) {
+			if (!presel)
+				WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+			else
+				WM_event_add_notifier(C, NC_SCENE | ND_OB_PRESELECT, scene);
 		}
 	}
 	

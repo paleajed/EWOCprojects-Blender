@@ -238,7 +238,7 @@ static void undo_clean_stack(bContext *C)
 void undo_editmode_step(bContext *C, int step)
 {
 	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
+	BMEditMesh *em;
 	
 	/* prevent undo to happen on wrong object, stack can be a mix */
 	undo_clean_stack(C);
@@ -247,16 +247,17 @@ void undo_editmode_step(bContext *C, int step)
 			
 		undo_restore(curundo, curundo->getdata(C), obedit->data);
 			
-		/* reinitialize preselection item lists */
-		em = BKE_editmesh_from_object(obedit);
-		
-		em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
-		em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
-		em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
-
-		em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-		em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-
+		if (obedit->type == OB_MESH) {
+			/* reinitialize preselection item lists */
+			em = BKE_editmesh_from_object(obedit);
+			
+			em->presel_verts = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSV");
+			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
+			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
+	
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+		}
 	}
 	else if (step == 1) {
 		

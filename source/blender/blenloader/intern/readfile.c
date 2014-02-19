@@ -6319,6 +6319,7 @@ static bool direct_link_screen(FileData *fd, bScreen *sc)
 				BLI_listbase_clear(&v3d->afterdraw_transp);
 				BLI_listbase_clear(&v3d->afterdraw_xray);
 				BLI_listbase_clear(&v3d->afterdraw_xraytransp);
+				BLI_listbase_clear(&v3d->preselobs);
 				v3d->properties_storage = NULL;
 				v3d->defmaterial = NULL;
 				

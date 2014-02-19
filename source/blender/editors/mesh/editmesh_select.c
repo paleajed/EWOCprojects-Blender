@@ -3383,10 +3383,22 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	ARegion *ar;
 	bContext *C = CTX_create();
 	
-	if (!screen->scene->obedit) return;
-	if (!(screen->scene->obedit->type == OB_MESH)) return;
+	if (!screen->scene->obedit) {
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	if (!(screen->scene->obedit->type == OB_MESH)) {
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
 	em = BKE_editmesh_from_object(screen->scene->obedit);
-	if (!screen->scene->toolsettings->use_prop_presel) {
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
 		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
 		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
 		BLI_ghash_free(temp_elems, NULL, NULL);
@@ -3395,7 +3407,8 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 		MEM_freeN(t);
 		return;
 	}
-	if (!force && (sa != wm->act_area)) return;
+	BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+	BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
 	
 	for (ar = sa->regionbase.first; ar; ar = ar->next) {
 		if (ar->regiontype == RGN_TYPE_WINDOW) {
@@ -3408,16 +3421,6 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	CTX_wm_area_set(C, sa);
 	CTX_data_scene_set(C, screen->scene);
 		
-	if (ts->proportional == PROP_EDIT_OFF) {
-		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
-		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
-		BLI_ghash_free(temp_elems, NULL, NULL);
-		BLI_ghash_free(temp_faces, NULL, NULL);
-		CTX_free(C);
-		MEM_freeN(t);
-		return;
-	}
-	
 	t->scene = screen->scene;
 	t->spacetype = sa->spacetype;
 	t->obedit = screen->scene->obedit;
@@ -3425,6 +3428,8 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	if (t->spacetype == SPACE_IMAGE) {
 		if (!(ts->uv_flag & UV_SYNC_SELECTION)) {
 			if (em->bm->totfacesel == 0) {
+				BLI_ghash_free(temp_elems, NULL, NULL);
+				BLI_ghash_free(temp_faces, NULL, NULL);
 				BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
 				BLI_ghash_free(temp_elems, NULL, NULL);
 				BLI_ghash_free(temp_faces, NULL, NULL);
@@ -3519,7 +3524,7 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 		median /= efa->len;
 		if (median > 0) {
 			if (t->spacetype == SPACE_VIEW3D) {
-				BLI_ghash_insert(em->prop3d_faces, efa->head.index, (unsigned char)median);
+				BLI_ghash_insert(em->prop3d_faces, efa, (unsigned char)median);
 			}
 			else if (t->spacetype == SPACE_IMAGE) {
 				BLI_ghash_insert(em->prop2d_faces, efa, (unsigned char)median);

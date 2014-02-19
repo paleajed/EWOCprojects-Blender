@@ -68,6 +68,8 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "transform.h"
+
 #include "object_intern.h"
 
 /********************** Load/Make/Free ********************/
@@ -845,7 +847,7 @@ void LATTICE_OT_flip(wmOperatorType *ot)
 
 /****************************** Mouse Selection *************************/
 
-static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const float screen_co[2])
+static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const float screen_co[2], bool dummy)
 {
 	struct { BPoint *bp; float dist; int select; float mval_fl[2]; } *data = userData;
 	float dist_test = len_manhattan_v2v2(data->mval_fl, screen_co);
@@ -858,6 +860,8 @@ static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const flo
 
 		data->bp = bp;
 	}
+	
+	bp->f1 &= ~PRESELECT;
 }
 
 static BPoint *findnearestLattvert(ViewContext *vc, const int mval[2], int sel)
@@ -873,12 +877,12 @@ static BPoint *findnearestLattvert(ViewContext *vc, const int mval[2], int sel)
 	data.mval_fl[1] = mval[1];
 
 	ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
-	lattice_foreachScreenVert(vc, findnearestLattvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+	lattice_foreachScreenVert(vc, findnearestLattvert__doClosest, &data, V3D_PROJ_TEST_CLIP_DEFAULT, false);
 
 	return data.bp;
 }
 
-bool mouse_lattice(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
+bool mouse_lattice(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool presel)
 {
 	ViewContext vc;
 	BPoint *bp = NULL;
@@ -889,7 +893,10 @@ bool mouse_lattice(bContext *C, const int mval[2], bool extend, bool deselect, b
 	bp = findnearestLattvert(&vc, mval, TRUE);
 
 	if (bp) {
-		if (extend) {
+		if (presel) {
+			bp->f1 |= PRESELECT;
+		}
+		else if (extend) {
 			bp->f1 |= SELECT;
 		}
 		else if (deselect) {
@@ -903,18 +910,26 @@ bool mouse_lattice(bContext *C, const int mval[2], bool extend, bool deselect, b
 			bp->f1 |= SELECT;
 		}
 
-		if (bp->f1 & SELECT) {
-			lt->actbp = bp - lt->def;
-		}
-		else {
-			lt->actbp = LT_ACTBP_NONE;
+		if (!presel) {
+			if (bp->f1 & SELECT) {
+				lt->actbp = bp - lt->def;
+			}
+			else {
+				lt->actbp = LT_ACTBP_NONE;
+			}
 		}
 
-		WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
+		if (presel)
+			WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+		else
+			WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
 
 		return true;
 	}
 
+	if (presel)
+		WM_event_add_notifier(C, NC_GEOM | ND_PRESELECT, NULL);
+		
 	return false;
 }
 
@@ -985,3 +1000,90 @@ void undo_push_lattice(bContext *C, const char *name)
 	undo_editmode_push(C, name, get_editlatt, free_undoLatt, undoLatt_to_editLatt, editLatt_to_undoLatt, validate_undoLatt);
 }
 
+
+
+/* -------------------- proportional preselection --------------------------- */
+
+void lattice_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+{
+	/* sets alpha for proportional preselection */
+	/* uses the transform code: to avoid much code duplication */
+	
+	/* todo mirror */
+	ToolSettings *ts = screen->scene->toolsettings;
+	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
+	Lattice *lt;
+	BPoint *bp;
+	int i, N;
+	ARegion *ar;
+	bContext *C = CTX_create();
+	
+	if (!screen->scene->obedit) {
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	lt = screen->scene->obedit->data;
+	if (!(screen->scene->obedit->type == OB_LATTICE)) {
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	bp = lt->editlatt->latt->def;
+	N = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+		for (i = 0; i < N; i++, bp++) {
+			bp->palpha = 0;
+		}
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	for (i = 0; i < N; i++, bp++) {
+		bp->palpha = 0;
+	}
+	
+	for (ar = sa->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_WINDOW) {
+			t->ar = ar;
+			break;
+		}
+	}
+	
+	CTX_wm_screen_set(C, screen);
+	CTX_wm_area_set(C, sa);
+	CTX_data_scene_set(C, screen->scene);
+		
+	t->scene = screen->scene;
+	t->spacetype = sa->spacetype;
+	t->obedit = screen->scene->obedit;
+	
+	switch (ts->proportional) {
+		case PROP_EDIT_ON:
+			t->flag |= T_PROP_EDIT;
+			break;
+		case PROP_EDIT_CONNECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_CONNECTED;
+			break;
+		case PROP_EDIT_PROJECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_PROJECTED;
+			break;
+	}
+	t->prop_mode = ts->prop_mode;
+	t->prop_size = ts->proportional_size;
+	
+	createTransData(C, t);
+	calculatePropRatio(t);
+	/* Set bpoint palpha to value based on proportional factor */
+	for(i = 0; i < t->total; i++) {
+		if (t->data[i].factor > 0) {
+			t->data[i].bp->palpha = (char)(t->data[i].factor * 255.0);
+		}
+	}
+	
+	CTX_free(C);
+	if (t->data)
+		MEM_freeN(t->data);
+	MEM_freeN(t);
+	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
+}

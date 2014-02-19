@@ -112,14 +112,16 @@ typedef struct BezTriple {
 	char h1, h2; 				/* h1, h2: the handle type of the two handles */
 	char f1, f2, f3;			/* f1, f2, f3: used for selection status */
 	char hide;					/* hide: used to indicate whether BezTriple is hidden (3D), type of keyframe (eBezTriple_KeyframeTypes) */
+	char palpha, pad[7];		/* palpha: alpha value of proportional preselection */
 } BezTriple;
 
 /* note; alfa location in struct is abused by Key system */
 typedef struct BPoint {
 	float vec[4];
 	float alfa, weight;		/* alfa: tilt in 3D View, weight: used for softbody goal weight */
-	short f1, hide;			/* f1: selection status,  hide: is point hidden or not */
-	float radius, pad;		/* user-set radius per point for beveling etc */
+	char f1, hide;			/* f1: selection status,  hide: is point hidden or not */  
+	char palpha, pad1;		/* palpha: alpha value of proportional preselection */
+	float radius, pad2;		/* user-set radius per point for beveling etc */
 } BPoint;
 
 /**

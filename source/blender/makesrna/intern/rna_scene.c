@@ -1578,6 +1578,7 @@ static void rna_FreestyleSettings_active_lineset_index_set(PointerRNA *ptr, int 
 static void rna_Presel_notify(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *UNUSED(ptr))
 {
 	WM_main_add_notifier(NC_GEOM | ND_SELECT, NULL); 
+	WM_main_add_notifier(NC_SCENE | ND_OB_SELECT, NULL); 
 }
 
 #else
@@ -1763,7 +1764,7 @@ static void rna_def_tool_settings(BlenderRNA  *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "proportional_objects", 0);
 	RNA_def_property_ui_text(prop, "Proportional Editing Objects", "Proportional editing object mode");
 	RNA_def_property_ui_icon(prop, ICON_PROP_OFF, 1);
-	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
+	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, "rna_Presel_notify"); /* header redraw */
 
 	prop = RNA_def_property(srna, "use_proportional_edit_mask", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "proportional_mask", 0);

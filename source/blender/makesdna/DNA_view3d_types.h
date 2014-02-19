@@ -224,6 +224,9 @@ typedef struct View3D {
 	/* XXX deprecated? */
 	struct bGPdata *gpd  DNA_DEPRECATED;		/* Grease-Pencil Data (annotation layers) */
 
+	/* object preselection */
+	struct ListBase preselobs;
+	
 } View3D;
 
 

@@ -3009,6 +3009,7 @@ int WM_border_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 int WM_border_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
+	Scene *scene = CTX_data_scene(C);
 	wmGesture *gesture = op->customdata;
 	rcti *rect = gesture->customdata;
 	int sx, sy;
@@ -3024,7 +3025,8 @@ int WM_border_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			rect->xmax = event->x - sx;
 			rect->ymax = event->y - sy;
 		}
-		border_apply_rect(C, op, true);
+		if (scene->toolsettings->use_presel)
+			border_apply_rect(C, op, true);
 
 		wm_gesture_tag_redraw(C);
 	}
@@ -3150,10 +3152,12 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	
 	if (win->gesture_level == WM_GESTURE_NONE) {	/* signals end */
 		if ((obedit) && presel) {
-			em = BKE_editmesh_from_object(obedit);
-			BLI_ghash_clear(em->presel_verts, NULL, NULL);
-			BLI_ghash_clear(em->presel_edges, NULL, NULL);
-			BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			if (obedit->type == OB_MESH) {
+				em = BKE_editmesh_from_object(obedit);
+				BLI_ghash_clear(em->presel_verts, NULL, NULL);
+				BLI_ghash_clear(em->presel_edges, NULL, NULL);
+				BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			}
 		}
 		wm_gesture_end(C, op);
 		WM_cursor_set(win, CURSOR_EDIT);
@@ -3210,10 +3214,12 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	if (event->type == MOUSEMOVE) {
 		
 		if (obedit) {
-			em = BKE_editmesh_from_object(obedit);
-			BLI_ghash_clear(em->presel_verts, NULL, NULL);
-			BLI_ghash_clear(em->presel_edges, NULL, NULL);
-			BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			if (obedit->type == OB_MESH) {
+				em = BKE_editmesh_from_object(obedit);
+				BLI_ghash_clear(em->presel_verts, NULL, NULL);
+				BLI_ghash_clear(em->presel_edges, NULL, NULL);
+				BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			}
 		}
 		
 		wm_subwindow_getorigin(CTX_wm_window(C), gesture->swinid, &sx, &sy);
@@ -3230,11 +3236,9 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			gesture_circle_apply(C, op);
 		}
 		else if (presel) {
-			if (obact->mode & OB_MODE_EDIT) {
-				if (RNA_struct_find_property(op->ptr, "gesture_mode"))
-					RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
-				gesture_circle_apply(C, op);
-			}
+			if (RNA_struct_find_property(op->ptr, "gesture_mode"))
+				RNA_int_set(op->ptr, "gesture_mode", GESTURE_MODAL_PRESEL);
+			gesture_circle_apply(C, op);
 		}
 	}
 	else if (event->type == EVT_MODAL_MAP) {
@@ -3305,10 +3309,12 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				if (event->val != GESTURE_MODAL_NOP) {
 					/* apply first click */
 					if ((obedit) && presel) {
-						em = BKE_editmesh_from_object(obedit);
-						BLI_ghash_clear(em->presel_verts, NULL, NULL);
-						BLI_ghash_clear(em->presel_edges, NULL, NULL);
-						BLI_ghash_clear(em->presel_faces, NULL, NULL);
+						if (obedit->type == OB_MESH) {
+							em = BKE_editmesh_from_object(obedit);
+							BLI_ghash_clear(em->presel_verts, NULL, NULL);
+							BLI_ghash_clear(em->presel_edges, NULL, NULL);
+							BLI_ghash_clear(em->presel_faces, NULL, NULL);
+						}
 					}
 					gesture_circle_apply(C, op);
 					gesture->mode = 1;

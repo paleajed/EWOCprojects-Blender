@@ -292,6 +292,9 @@ typedef struct Object {
 
 	/* Runtime valuated curve-specific data, not stored in the file */
 	struct CurveCache *curve_cache;
+	
+	char palpha, pad1[7];	/* object mode proportional preselection alpha */
+	
 } Object;
 
 /* Warning, this is not used anymore because hooks are now modifiers */
@@ -335,6 +338,7 @@ typedef struct DupliObject {
 
 /* used many places... should be specialized  */
 #define SELECT          1
+/* #define PRESELECT		2		defined in ED_curve.h but mentioned here - erase later */ 
 
 /* type */
 enum {

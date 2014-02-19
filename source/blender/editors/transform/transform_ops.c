@@ -479,10 +479,10 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 }
 
 
-static void propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
+static int propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
 {
 	ToolSettings *ts = CTX_data_scene(C)->toolsettings;
-	bool smaller = RNA_int_get(op->ptr, "smaller");
+	bool smaller = RNA_boolean_get(op->ptr, "smaller");
 	
 	if (ts->use_prop_presel) {
 		if (smaller) {
@@ -494,7 +494,10 @@ static void propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
 			ts->proportional_size *= 1.1f;
 	}
 
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);	/* trigger presel calc */
+	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);		/* trigger presel calc */
+	WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, NULL);	/* trigger presel calc */
+	
+	return OPERATOR_FINISHED;
 }
 
 
@@ -969,7 +972,7 @@ static void TRANSFORM_OT_prop_size(struct wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->invoke = propsize_invoke;
-	ot->poll   = ED_operator_editmesh;
+	ot->poll   = ED_operator_screenactive;
 
 	RNA_def_boolean(ot->srna, "smaller", true, "Smaller?", "Dialing size up or down");
 }
@@ -1047,9 +1050,9 @@ void transform_keymap_for_space(wmKeyConfig *keyconf, wmKeyMap *keymap, int spac
 
 			WM_keymap_add_item(keymap, OP_SKIN_RESIZE, AKEY, KM_PRESS, KM_CTRL, 0);
 
-			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_OSKEY, 0);
+			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_SHIFT | KM_ALT | KM_CTRL, 0);
 			RNA_boolean_set(kmi->ptr, "smaller", TRUE);
-			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_OSKEY, 0);
+			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_SHIFT | KM_ALT | KM_CTRL, 0);
 			RNA_boolean_set(kmi->ptr, "smaller", FALSE);
 			break;
 			

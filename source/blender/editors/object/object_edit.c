@@ -101,6 +101,8 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "transform.h"
+
 #include "object_intern.h"  // own include
 
 /* ************* XXX **************** */
@@ -432,6 +434,7 @@ void ED_object_editmode_enter(bContext *C, int flag)
 	Scene *scene = CTX_data_scene(C);
 	Base *base = NULL;
 	Object *ob;
+	bScreen *screen = CTX_wm_screen(C);
 	ScrArea *sa = CTX_wm_area(C);
 	View3D *v3d = NULL;
 	int ok = 0;
@@ -441,6 +444,10 @@ void ED_object_editmode_enter(bContext *C, int flag)
 	if (sa && sa->spacetype == SPACE_VIEW3D)
 		v3d = sa->spacedata.first;
 
+	for (base = screen->scene->base.first; base; base = base->next) {
+		base->object->palpha = 0;
+	}
+		
 	if ((flag & EM_IGNORE_LAYER) == 0) {
 		base = CTX_data_active_base(C); /* active layer checked here for view3d */
 
@@ -502,7 +509,6 @@ void ED_object_editmode_enter(bContext *C, int flag)
 		WM_operator_name_call(C, "VIEW3D_OT_preselect", WM_OP_INVOKE_DEFAULT, NULL);
 
 		WM_event_add_notifier(C, NC_SCENE | ND_MODE | NS_EDITMODE_MESH, scene);
-		WM_event_add_notifier(C, NC_GEOM | ND_DATA | NA_ADDED, NULL);
 	}
 	else if (ob->type == OB_ARMATURE) {
 		bArmature *arm = ob->data;
@@ -2017,4 +2023,81 @@ void OBJECT_OT_game_physics_copy(struct wmOperatorType *ot)
 	
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+
+
+
+/* -------------------- proportional preselection --------------------------- */
+
+void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+{
+	/* sets alpha for proportional preselection */
+	/* uses the transform code: to avoid much code duplication */
+	
+	/* todo mirror */
+	ToolSettings *ts = screen->scene->toolsettings;
+	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
+	ARegion *ar;
+	bContext *C = CTX_create();
+	Base *base;
+	int i;
+
+	if ((screen->scene->obedit) || (!ts->use_prop_presel) || (ts->proportional_objects == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+		for (base = screen->scene->base.first; base; base = base->next) {
+			base->object->palpha = 0;
+		}
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	for (base = screen->scene->base.first; base; base = base->next) {
+		base->object->palpha = 0;
+	}
+	
+	for (ar = sa->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_WINDOW) {
+			t->ar = ar;
+			break;
+		}
+	}
+	
+	CTX_wm_screen_set(C, screen);
+	CTX_wm_area_set(C, sa);
+	CTX_data_scene_set(C, screen->scene);
+		
+	t->scene = screen->scene;
+	t->spacetype = sa->spacetype;
+	
+	switch (ts->proportional) {
+		case PROP_EDIT_ON:
+			t->flag |= T_PROP_EDIT;
+			break;
+		case PROP_EDIT_CONNECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_CONNECTED;
+			break;
+		case PROP_EDIT_PROJECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_PROJECTED;
+			break;
+	}
+	t->prop_mode = ts->prop_mode;
+	t->prop_size = ts->proportional_size;
+	t->flag |= T_PROP_EDIT;
+	
+	createTransData(C, t);
+	calculatePropRatio(t);
+	/* Set object palpha to value based on proportional factor */
+	for(i = 0; i < t->total; i++) {
+		if (t->data[i].factor > 0) {
+			t->data[i].ob->palpha = (char)(t->data[i].factor * 255.0);
+		}
+	}
+	
+	CTX_free(C);
+	if (t->data)
+		MEM_freeN(t->data);
+	if (t->ext)
+		MEM_freeN(t->ext);
+	MEM_freeN(t);
+	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
 }

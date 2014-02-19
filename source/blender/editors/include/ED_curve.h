@@ -38,6 +38,9 @@ struct Object;
 struct Scene;
 struct Text;
 struct View3D;
+struct bScreen;
+struct ScrArea;
+struct wmWindowManager;
 struct wmOperator;
 struct wmKeyConfig;
 struct Curve;
@@ -64,13 +67,15 @@ void    load_editNurb(struct Object *obedit);
 void    make_editNurb(struct Object *obedit);
 void    free_editNurb(struct Object *obedit);
 
-bool    mouse_nurb(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
+bool    mouse_nurb(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool presel);
 
 struct Nurb *add_nurbs_primitive(struct bContext *C, struct Object *obedit, float mat[4][4], int type, int newob);
 
 int     isNurbsel(struct Nurb *nu);
 
 int     join_curve_exec(struct bContext *C, struct wmOperator *op);
+
+void 	curve_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force);
 
 /* editfont.h */
 void    undo_push_font(struct bContext *C, const char *name);

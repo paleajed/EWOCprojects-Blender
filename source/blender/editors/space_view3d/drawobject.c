@@ -86,6 +86,7 @@
 #include "GPU_extensions.h"
 
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_particle.h"
 #include "ED_screen.h"
 #include "ED_sculpt.h"
@@ -1854,7 +1855,10 @@ static void lattice_draw_verts(Lattice *lt, DispList *dl, BPoint *actbp, short s
 	int u, v, w;
 
 	const int color = sel ? TH_VERTEX_SELECT : TH_VERTEX;
-	UI_ThemeColor(color);
+	const int precolor = sel ? TH_PRESEL_SELECT : TH_PRESEL_NOSELECT;
+	unsigned char prop_col[4];
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
 
 	glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE));
 	bglBegin(GL_POINTS);
@@ -1869,12 +1873,46 @@ static void lattice_draw_verts(Lattice *lt, DispList *dl, BPoint *actbp, short s
 					if (bp->hide == 0) {
 						/* check for active BPoint and ensure selected */
 						if ((bp == actbp) && (bp->f1 & SELECT)) {
-							UI_ThemeColor(TH_ACTIVE_VERT);
+							if (bp->f1 & PRESELECT)
+								UI_ThemeColor(TH_PRESEL_SELECT);
+							else
+								UI_ThemeColor(TH_ACTIVE_VERT);
 							bglVertex3fv(dl ? co : bp->vec);
-							UI_ThemeColor(color);
 						}
 						else if ((bp->f1 & SELECT) == sel) {
+							UI_ThemeColor(color);
 							bglVertex3fv(dl ? co : bp->vec);
+						}
+					}
+				}
+			}
+		}
+	}
+	bglEnd();
+	
+	glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE) + 1);
+	glEnable(GL_BLEND);
+	bglBegin(GL_POINTS);
+	bp = lt->def;
+	co = dl ? dl->verts : NULL;
+	for (w = 0; w < lt->pntsw; w++) {
+		int wxt = (w == 0 || w == lt->pntsw - 1);
+		for (v = 0; v < lt->pntsv; v++) {
+			int vxt = (v == 0 || v == lt->pntsv - 1);
+			for (u = 0; u < lt->pntsu; u++, bp++, co += 3) {
+				int uxt = (u == 0 || u == lt->pntsu - 1);
+				if (!(lt->flag & LT_OUTSIDE) || uxt || vxt || wxt) {
+					if (bp->hide == 0) {
+						if ((bp->f1 & SELECT) == sel) {
+							if (bp->palpha != 0) {
+								prop_col[3] = bp->palpha;
+								glColor4ubv(prop_col);
+								bglVertex3fv(dl ? co : bp->vec);
+							}
+							if (bp->f1 & PRESELECT) {
+								UI_ThemeColor(precolor);
+								bglVertex3fv(dl ? co : bp->vec);
+							}
 						}
 					}
 				}
@@ -3338,6 +3376,23 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 			glFrontFace(GL_CCW);
 			glDisable(GL_LIGHTING);
 			glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
+
+			/* overlay wireframe if wire drawing is enabled on object */
+			if (ob->dtx & OB_DRAWWIRE) {
+				float wirecol[3];
+				
+				bglPolygonOffset(rv3d->dist, 1.0);
+				glDepthMask(0);
+				glEnable(GL_BLEND);
+				
+				UI_GetThemeColor3fv(TH_WIRE, wirecol);
+				glColor4f(wirecol[0], wirecol[1], wirecol[2], 0.2f);
+				finalDM->drawEdges(finalDM, 1, 1);
+				
+				glDepthMask(1);
+				bglPolygonOffset(rv3d->dist, 0.0);
+				glDisable(GL_BLEND);
+			}
 		}
 
 		/* Setup for drawing wire over, disable zbuffer
@@ -3528,13 +3583,14 @@ static void draw_em_fancy(Scene *scene, ARegion *ar, View3D *v3d,
 
 /* Mesh drawing routines */
 
-static void draw_mesh_object_outline(View3D *v3d, Object *ob, DerivedMesh *dm)
+static void draw_mesh_object_outline(View3D *v3d, Object *ob, DerivedMesh *dm, char addwidth)
 {
 	if ((v3d->transp == false) &&  /* not when we draw the transparent pass */
 	    (ob->mode & OB_MODE_ALL_PAINT) == false) /* not when painting (its distracting) - campbell */
 	{
-		glLineWidth(UI_GetThemeValuef(TH_OUTLINE_WIDTH) * 2.0f);
+		glLineWidth(UI_GetThemeValuef(TH_OUTLINE_WIDTH) * 2.0f + addwidth);
 		glDepthMask(0);
+		glEnable(GL_BLEND);
 
 		/* if transparent, we cannot draw the edges for solid select... edges have no material info.
 		 * drawFacesSolid() doesn't draw the transparent faces */
@@ -3548,6 +3604,7 @@ static void draw_mesh_object_outline(View3D *v3d, Object *ob, DerivedMesh *dm)
 			dm->drawEdges(dm, 0, 1);
 		}
 
+		glDisable(GL_BLEND);
 		glLineWidth(1.0);
 		glDepthMask(1);
 	}
@@ -3565,6 +3622,8 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 	DerivedMesh *dm = mesh_get_derived_final(scene, ob, scene->customdata_mask);
 	const bool is_obact = (ob == OBACT);
 	int draw_flags = (is_obact && paint_facesel_test(ob)) ? DRAW_FACE_SELECT : 0;
+	unsigned char prop_col[4];
+	Base *biter;
 
 	if (!dm)
 		return;
@@ -3610,7 +3669,7 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 		    !(G.f & G_PICKSEL || (draw_flags & DRAW_FACE_SELECT)) &&
 		    (draw_wire == OBDRAW_WIRE_OFF))
 		{
-			draw_mesh_object_outline(v3d, ob, dm);
+			draw_mesh_object_outline(v3d, ob, dm, 0);
 		}
 
 		if (draw_glsl_material(scene, ob, v3d, dt) && !(draw_flags & DRAW_MODIFIERS_PREVIEW)) {
@@ -3655,9 +3714,27 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 				    (draw_wire == OBDRAW_WIRE_OFF) &&
 				    (ob->sculpt == NULL))
 				{
-					draw_mesh_object_outline(v3d, ob, dm);
+					draw_mesh_object_outline(v3d, ob, dm, 0);
 				}
-
+				/* draw preselection outline? */
+				if (scene->toolsettings->use_prop_presel) {
+					if (ob->palpha != 0) {
+						UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
+						prop_col[3] = ob->palpha;
+						glColor4ubv(prop_col);
+						draw_mesh_object_outline(v3d, ob, dm, 1);
+					}
+					for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+						if (biter->object == ob) {
+							if (ob->flag & SELECT)
+								UI_ThemeColor(TH_PRESEL_SELECT);
+							else
+								UI_ThemeColor(TH_PRESEL_NOSELECT);
+							draw_mesh_object_outline(v3d, ob, dm, 1);
+						}
+					}
+				}
+		
 				/* materials arent compatible with vertex colors */
 				GPU_end_object_materials();
 
@@ -3687,9 +3764,28 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 			    (draw_wire == OBDRAW_WIRE_OFF) &&
 			    (ob->sculpt == NULL))
 			{
-				draw_mesh_object_outline(v3d, ob, dm);
+				draw_mesh_object_outline(v3d, ob, dm, 0);
 			}
-
+			/* draw preselection outline? */
+			if (scene->toolsettings->use_prop_presel) {
+				if (ob->palpha != 0) {
+					UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
+					prop_col[3] = ob->palpha;
+					glColor4ubv(prop_col);
+					draw_mesh_object_outline(v3d, ob, dm, 1);
+				}
+				for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+					if (biter->object == ob) {
+						if (ob->flag & SELECT)
+							UI_ThemeColor(TH_PRESEL_SELECT);
+						else
+							UI_ThemeColor(TH_PRESEL_NOSELECT);
+						draw_mesh_object_outline(v3d, ob, dm, 1);
+						break;
+					}
+				}
+			}
+	
 			glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, (me->flag & ME_TWOSIDED) ? GL_TRUE : GL_FALSE);
 
 			glEnable(GL_LIGHTING);
@@ -5551,26 +5647,26 @@ static void drawvertsN(Nurb *nu, const char sel, const bool hide_handles, const 
 	BezTriple *bezt;
 	BPoint *bp;
 	float size;
-	int a, color;
+	int a;
+	const int color = sel ? TH_VERTEX_SELECT : TH_VERTEX;
+	const int precolor = sel ? TH_PRESEL_SELECT : TH_PRESEL_NOSELECT;
+	unsigned char prop_col[4];
+	
+	UI_GetThemeColor4ubv(TH_PRESEL_PROP, prop_col);
 
 	if (nu->hide) return;
-
-	if (sel) color = TH_VERTEX_SELECT;
-	else color = TH_VERTEX;
-
-	UI_ThemeColor(color);
 
 	size = UI_GetThemeValuef(TH_VERTEX_SIZE);
 	glPointSize(size);
 	
-	bglBegin(GL_POINTS);
-	
+	bglBegin(GL_POINTS);	
 	if (nu->type == CU_BEZIER) {
 
 		bezt = nu->bezt;
 		a = nu->pntsu;
 		while (a--) {
 			if (bezt->hide == 0) {
+				UI_ThemeColor(color);
 				if (sel == 1 && bezt == vert) {
 					UI_ThemeColor(TH_ACTIVE_VERT);
 					bglVertex3fv(bezt->vec[1]);
@@ -5602,17 +5698,60 @@ static void drawvertsN(Nurb *nu, const char sel, const bool hide_handles, const 
 				if (bp == vert) {
 					UI_ThemeColor(TH_ACTIVE_VERT);
 					bglVertex3fv(bp->vec);
-					UI_ThemeColor(color);
 				}
 				else {
+					UI_ThemeColor(color);
 					if ((bp->f1 & SELECT) == sel) bglVertex3fv(bp->vec);
 				}
 			}
 			bp++;
 		}
 	}
-	
 	bglEnd();
+	
+	/* preselection */
+	glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE) + 1);
+	glEnable(GL_BLEND);
+	bglBegin(GL_POINTS);	
+	if (nu->type == CU_BEZIER) {
+		bezt = nu->bezt;
+		a = nu->pntsu;
+		while (a--) {
+			/* preselection */
+			prop_col[3] = bezt->palpha;
+			glColor4ubv(prop_col);
+			if (bezt->palpha != 0) bglVertex3fv(bezt->vec[1]);
+			
+			UI_ThemeColor(precolor);
+			if ((bezt->f1 & PRESELECT) && ((bezt->f1 & SELECT) == sel))
+				bglVertex3fv(bezt->vec[0]);
+			if ((bezt->f2 & PRESELECT) && ((bezt->f2 & SELECT) == sel))
+				bglVertex3fv(bezt->vec[1]);
+			if ((bezt->f3 & PRESELECT) && ((bezt->f3 & SELECT) == sel))
+				bglVertex3fv(bezt->vec[2]);
+
+			bezt++;
+		}
+	}
+	else {
+		bp = nu->bp;
+		a = nu->pntsu * nu->pntsv;
+		while (a--) {
+			if (bp->hide == 0) {
+				/* preselection */
+				prop_col[3] = bp->palpha;
+				glColor4ubv(prop_col);
+				if (bp->palpha != 0) bglVertex3fv(bp->vec);
+				
+				UI_ThemeColor(precolor);
+				if ((bp->f1 & PRESELECT) && ((bp->f1 & SELECT) == sel))
+					bglVertex3fv(bp->vec);
+			}
+			bp++;
+		}
+	}
+	bglEnd();
+	glDisable(GL_BLEND);
 	glPointSize(1.0);
 }
 
@@ -6546,12 +6685,12 @@ static void drawtexspace(Object *ob)
 
 /* draws wire outline */
 static void drawObjectSelect(Scene *scene, View3D *v3d, ARegion *ar, Base *base,
-                             const unsigned char ob_wire_col[4])
+                             const unsigned char ob_wire_col[4], char addwidth)
 {
 	RegionView3D *rv3d = ar->regiondata;
 	Object *ob = base->object;
 	
-	glLineWidth(UI_GetThemeValuef(TH_OUTLINE_WIDTH) * 2.0f);
+	glLineWidth(UI_GetThemeValuef(TH_OUTLINE_WIDTH) * 2.0f + addwidth);
 	glDepthMask(0);
 	
 	if (ELEM3(ob->type, OB_FONT, OB_CURVE, OB_SURF)) {
@@ -6568,7 +6707,7 @@ static void drawObjectSelect(Scene *scene, View3D *v3d, ARegion *ar, Base *base,
 		if (has_faces && ED_view3d_boundbox_clip(rv3d, ob->obmat, ob->bb)) {
 			draw_index_wire = false;
 			if (dm) {
-				draw_mesh_object_outline(v3d, ob, dm);
+				draw_mesh_object_outline(v3d, ob, dm, addwidth);
 			}
 			else {
 				drawDispListwire(&ob->curve_cache->disp);
@@ -6838,6 +6977,7 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 	Object *ob = base->object;
 	Curve *cu;
 	RegionView3D *rv3d = ar->regiondata;
+	Base *biter;
 	float vec1[3], vec2[3];
 	unsigned int col = 0;
 	unsigned char _ob_wire_col[4];      /* dont initialize this */
@@ -6929,6 +7069,16 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 		ED_view3d_project_base(ar, base);
 
 		draw_object_wire_color(scene, base, _ob_wire_col);
+		if (scene->toolsettings->use_presel) {
+			for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+				if (biter->object == ob) {
+					if (ob->flag & SELECT)
+						UI_GetThemeColor3ubv(TH_PRESEL_SELECT, _ob_wire_col);
+					else
+						UI_GetThemeColor3ubv(TH_PRESEL_NOSELECT, _ob_wire_col);
+				}
+			}
+		}
 		ob_wire_col = _ob_wire_col;
 
 		glColor3ubv(ob_wire_col);
@@ -6982,8 +7132,15 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 		if ((v3d->flag & V3D_SELECT_OUTLINE) && !render_override && ob->type != OB_MESH) {
 			if (dt > OB_WIRE && (ob->mode & OB_MODE_EDIT) == 0 && (dflag & DRAW_SCENESET) == 0) {
 				if (!(ob->dtx & OB_DRAWWIRE) && (ob->flag & SELECT) && !(dflag & (DRAW_PICKING | DRAW_CONSTCOLOR))) {
-					drawObjectSelect(scene, v3d, ar, base, ob_wire_col);
+					drawObjectSelect(scene, v3d, ar, base, ob_wire_col, 0);
 				}
+			}
+		}
+		/* draw preselection outline? */
+		if (scene->toolsettings->use_presel) {
+			for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+				if (biter->object == ob)
+					drawObjectSelect(scene, v3d, ar, base, ob_wire_col, 1);
 			}
 		}
 
@@ -7933,7 +8090,7 @@ static void draw_object_mesh_instance(Scene *scene, View3D *v3d, RegionView3D *r
 	}
 	else {
 		if (outline)
-			draw_mesh_object_outline(v3d, ob, dm ? dm : edm);
+			draw_mesh_object_outline(v3d, ob, dm ? dm : edm, 0);
 
 		if (dm) {
 			glsl = draw_glsl_material(scene, ob, v3d, dt);

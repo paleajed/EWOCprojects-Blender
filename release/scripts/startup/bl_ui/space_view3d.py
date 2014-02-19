@@ -2781,6 +2781,7 @@ class VIEW3D_PT_view3d_display(Panel):
 
         view = context.space_data
         scene = context.scene
+        toolsettings = context.tool_settings
         gs = scene.game_settings
         obj = context.object
 
@@ -2811,6 +2812,11 @@ class VIEW3D_PT_view3d_display(Panel):
         subsub = sub.column(align=True)
         subsub.active = scene.unit_settings.system == 'NONE'
         subsub.prop(view, "grid_subdivisions", text="Subdivisions")
+
+        layout.separator()
+
+        col.prop(toolsettings, "use_presel", text="Preselection")
+        col.prop(toolsettings, "use_prop_presel", text="Prop Presel")
 
         layout.separator()
 
@@ -2927,9 +2933,6 @@ class VIEW3D_PT_view3d_meshdisplay(Panel):
 
         layout.prop(mesh, "show_weight")
         
-        layout.prop(toolsettings, "use_presel", text="Preselection")
-        layout.prop(toolsettings, "use_prop_presel", text="Prop Presel")
-
         col = split.column()
         col.label()
         if not with_freestyle:

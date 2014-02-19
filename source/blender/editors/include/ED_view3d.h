@@ -149,8 +149,8 @@ void mesh_foreachScreenFace(
 void nurbs_foreachScreenVert(
         struct ViewContext *vc,
         void (*func)(void *userData, struct Nurb *nu, struct BPoint *bp, struct BezTriple *bezt,
-                     int beztindex, const float screen_co[2]),
-        void *userData, const eV3DProjTest clip_flag);
+                     int beztindex, const float screen_co[2], bool presel),
+        void *userData, const eV3DProjTest clip_flag, bool presel);
 void mball_foreachScreenElem(
         struct ViewContext *vc,
         void (*func)(void *userData, struct MetaElem *ml, const float screen_co[2]),
@@ -158,8 +158,8 @@ void mball_foreachScreenElem(
 void lattice_foreachScreenVert(
         struct ViewContext *vc,
         void (*func)(void *userData, struct BPoint *bp,
-                     const float screen_co[2]),
-        void *userData, const eV3DProjTest clip_flag);
+                     const float screen_co[2], bool presel),
+        void *userData, const eV3DProjTest clip_flag, bool presel);
 void armature_foreachScreenBone(
         struct ViewContext *vc,
         void (*func)(void *userData, struct EditBone *ebone,

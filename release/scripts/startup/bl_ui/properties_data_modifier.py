@@ -138,14 +138,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         elif md.limit_method == 'VGROUP':
             layout.label(text="Vertex Group:")
             layout.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-<<<<<<< HEAD
-        # elif md.limit_method == 'WEIGHT':
-        #    layout.row().prop(md, "edge_weight_method", expand=True)
-=======
 
         layout.label(text="Width Method:")
         layout.row().prop(md, "offset_type", expand=True)
->>>>>>> 76dd68351ccd3e874a1c550892c8a2fca7017766
 
     def BOOLEAN(self, layout, ob, md):
         split = layout.split()

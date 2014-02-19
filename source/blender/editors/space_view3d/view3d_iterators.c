@@ -272,8 +272,8 @@ void mesh_foreachScreenFace(
 
 void nurbs_foreachScreenVert(
         ViewContext *vc,
-        void (*func)(void *userData, Nurb *nu, BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co_b[2]),
-        void *userData, const eV3DProjTest clip_flag)
+        void (*func)(void *userData, Nurb *nu, BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co_b[2], bool presel),
+        void *userData, const eV3DProjTest clip_flag, bool presel)
 {
 	Curve *cu = vc->obedit->data;
 	Nurb *nu;
@@ -298,24 +298,24 @@ void nurbs_foreachScreenVert(
 						if (ED_view3d_project_float_object(vc->ar, bezt->vec[1], screen_co,
 						                                   V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) == V3D_PROJ_RET_OK)
 						{
-							func(userData, nu, NULL, bezt, 1, screen_co);
+							func(userData, nu, NULL, bezt, 1, screen_co, presel);
 						}
 					}
 					else {
 						if (ED_view3d_project_float_object(vc->ar, bezt->vec[0], screen_co,
 						                                   V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) == V3D_PROJ_RET_OK)
 						{
-							func(userData, nu, NULL, bezt, 0, screen_co);
+							func(userData, nu, NULL, bezt, 0, screen_co, presel);
 						}
 						if (ED_view3d_project_float_object(vc->ar, bezt->vec[1], screen_co,
 						                                   V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) == V3D_PROJ_RET_OK)
 						{
-							func(userData, nu, NULL, bezt, 1, screen_co);
+							func(userData, nu, NULL, bezt, 1, screen_co, presel);
 						}
 						if (ED_view3d_project_float_object(vc->ar, bezt->vec[2], screen_co,
 						                                   V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) == V3D_PROJ_RET_OK)
 						{
-							func(userData, nu, NULL, bezt, 2, screen_co);
+							func(userData, nu, NULL, bezt, 2, screen_co, presel);
 						}
 					}
 				}
@@ -330,7 +330,7 @@ void nurbs_foreachScreenVert(
 					if (ED_view3d_project_float_object(vc->ar, bp->vec, screen_co,
 					                                   V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) == V3D_PROJ_RET_OK)
 					{
-						func(userData, nu, bp, NULL, -1, screen_co);
+						func(userData, nu, bp, NULL, -1, screen_co, presel);
 					}
 				}
 			}
@@ -363,8 +363,8 @@ void mball_foreachScreenElem(
 
 void lattice_foreachScreenVert(
         ViewContext *vc,
-        void (*func)(void *userData, BPoint *bp, const float screen_co[2]),
-        void *userData, const eV3DProjTest clip_flag)
+        void (*func)(void *userData, BPoint *bp, const float screen_co[2], bool presel),
+        void *userData, const eV3DProjTest clip_flag, bool presel)
 {
 	Object *obedit = vc->obedit;
 	Lattice *lt = obedit->data;
@@ -383,7 +383,7 @@ void lattice_foreachScreenVert(
 		if (bp->hide == 0) {
 			float screen_co[2];
 			if (ED_view3d_project_float_object(vc->ar, dl ? co : bp->vec, screen_co, clip_flag) == V3D_PROJ_RET_OK) {
-				func(userData, bp, screen_co);
+				func(userData, bp, screen_co, presel);
 			}
 		}
 	}
