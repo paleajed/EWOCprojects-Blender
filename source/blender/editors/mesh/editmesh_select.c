@@ -57,6 +57,7 @@
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_view3d.h"
 
 #include "BIF_gl.h"
@@ -3360,7 +3361,7 @@ void MESH_OT_loop_to_region(wmOperatorType *ot)
 
 /* -------------------- preselection --------------------------------------------- */
 
-void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -3381,6 +3382,7 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	int pos = 0;
 	int i;
 	ARegion *ar;
+	View3D *v3d = sa->spacedata.first;
 	bContext *C = CTX_create();
 	
 	if (!screen->scene->obedit) {
@@ -3536,15 +3538,27 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	}
 	BLI_ghashIterator_free(ghiter);
 	
+	if (draw && !ar->propcircle_handle) {
+		t->flag |= T_PROP_EDIT;
+		t->around = v3d->around;
+		t->ar = ar;
+		t->view = v3d;
+		calculateCenter(t);
+		t->prop_size = ts->proportional_size;
+		ar->propcircle_handle = ED_region_draw_cb_activate(t->ar->type, drawPreselPropCircle, t, REGION_DRAW_POST_VIEW);
+	}
+	else {
+		if (t->data)
+			MEM_freeN(t->data);
+		if (t->spacetype == SPACE_IMAGE) {
+			if (t->data2d)
+				MEM_freeN(t->data2d);
+		}
+		MEM_freeN(t);
+	}
+		
 	BLI_ghash_free(temp_elems, NULL, NULL);
 	BLI_ghash_free(temp_faces, NULL, NULL);
 	CTX_free(C);
-	if (t->data)
-		MEM_freeN(t->data);
-	if (t->spacetype == SPACE_IMAGE) {
-		if (t->data2d)
-			MEM_freeN(t->data2d);
-	}
-	MEM_freeN(t);
 	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
 }

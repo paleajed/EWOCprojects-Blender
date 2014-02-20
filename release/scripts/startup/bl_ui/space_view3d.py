@@ -2318,8 +2318,10 @@ class VIEW3D_MT_edit_mesh_clean(Menu):
 
         layout.separator()
 
-        layout.operator("mesh.fill_holes")
+        layout.operator("mesh.dissolve_degenerate")
+        layout.operator("mesh.dissolve_limited")
         layout.operator("mesh.vert_connect_nonplanar")
+        layout.operator("mesh.fill_holes")
 
 
 class VIEW3D_MT_edit_mesh_delete(Menu):
@@ -2815,8 +2817,8 @@ class VIEW3D_PT_view3d_display(Panel):
 
         layout.separator()
 
-        col.prop(toolsettings, "use_presel", text="Preselection")
-        col.prop(toolsettings, "use_prop_presel", text="Prop Presel")
+        layout.prop(toolsettings, "use_presel", text="Preselection")
+        layout.prop(toolsettings, "use_prop_presel", text="Prop Presel")
 
         layout.separator()
 

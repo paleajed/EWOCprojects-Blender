@@ -911,10 +911,10 @@ static void view3d_main_area_listener(bScreen *sc, ScrArea *sa, ARegion *ar, wmN
 						}
 					}
 				if (sc->scene->toolsettings->proportional == PROP_EDIT_PROJECTED) {
-						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
-						lattice_create_prop_presel(wmn->wm, sc, sa, false);
-						curve_create_prop_presel(wmn->wm, sc, sa, false);
-						objects_create_prop_presel(wmn->wm, sc, sa, false);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+						lattice_create_prop_presel(wmn->wm, sc, sa, false, false);
+						curve_create_prop_presel(wmn->wm, sc, sa, false, false);
+						objects_create_prop_presel(wmn->wm, sc, sa, false, false);
 					}
 				}
 			}
@@ -1005,8 +1005,12 @@ static void view3d_header_area_listener(bScreen *UNUSED(sc), ScrArea *UNUSED(sa)
 				ED_region_tag_redraw(ar);
 			break;
 		case NC_GEOM:
-			if (wmn->data == ND_SELECT)
-				ED_region_tag_redraw(ar);
+			switch (wmn->data) {
+				case ND_SELECT:
+				case ND_PRESELECT:
+					ED_region_tag_redraw(ar);
+					break;
+			}
 			break;
 	}
 }
@@ -1082,6 +1086,7 @@ static void view3d_buttons_area_listener(bScreen *UNUSED(sc), ScrArea *UNUSED(sa
 				case ND_DATA:
 				case ND_VERTEX_GROUP:
 				case ND_SELECT:
+				case ND_PRESELECT:
 					ED_region_tag_redraw(ar);
 					break;
 			}
@@ -1162,39 +1167,39 @@ static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *w
 					break;
 				case ND_TRANSFORM_DONE:
 					/* Adapt proportional mode preselection */
-					EDBM_create_prop_presel(wmn->wm, sc, sa, false);
-					lattice_create_prop_presel(wmn->wm, sc, sa, false);
-					curve_create_prop_presel(wmn->wm, sc, sa, false);
-					objects_create_prop_presel(wmn->wm, sc, sa, false);
+					EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+					lattice_create_prop_presel(wmn->wm, sc, sa, false, false);
+					curve_create_prop_presel(wmn->wm, sc, sa, false, false);
+					objects_create_prop_presel(wmn->wm, sc, sa, false, false);
 					break;
 				case ND_OB_SELECT:
 				case ND_OB_PRESELECT:
 					/* Adapt proportional mode preselection */
-					objects_create_prop_presel(wmn->wm, sc, sa, false);
+					objects_create_prop_presel(wmn->wm, sc, sa, false, false);
 					break;
 				case ND_MODE:
 					switch (wmn->subtype) {
 						case NS_EDITMODE_MESH:
 							/* Adapt proportional mode preselection */
-							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
 							
 							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 							break;
 						case NS_EDITMODE_LATTICE:
 							/* Adapt proportional mode preselection */
-							lattice_create_prop_presel(wmn->wm, sc, sa, true);
+							lattice_create_prop_presel(wmn->wm, sc, sa, true, false);
 							
 							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 							break;
 						case NS_EDITMODE_CURVE:
 							/* Adapt proportional mode preselection */
-							curve_create_prop_presel(wmn->wm, sc, sa, true);
+							curve_create_prop_presel(wmn->wm, sc, sa, true, false);
 							
 							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 							break;
 						case NS_MODE_OBJECT:
 							/* Adapt proportional mode preselection */
-							objects_create_prop_presel(wmn->wm, sc, sa, true);
+							objects_create_prop_presel(wmn->wm, sc, sa, true, false);
 							
 							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 							break;
@@ -1224,9 +1229,9 @@ static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *w
 					switch (wmn->action) {
 						case NA_ADDED:
 							/* Adapt proportional mode preselection */
-							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
-							lattice_create_prop_presel(wmn->wm, sc, sa, true);
-							curve_create_prop_presel(wmn->wm, sc, sa, true);
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+							lattice_create_prop_presel(wmn->wm, sc, sa, true, false);
+							curve_create_prop_presel(wmn->wm, sc, sa, true, false);
 							
 							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 							break;
@@ -1236,28 +1241,24 @@ static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *w
 					switch (wmn->action) {
 						case NA_ADDED:
 							/* Adapt proportional mode preselection */
-							EDBM_create_prop_presel(wmn->wm, sc, sa, true);
-							lattice_create_prop_presel(wmn->wm, sc, sa, true);
-							curve_create_prop_presel(wmn->wm, sc, sa, true);
-							objects_create_prop_presel(wmn->wm, sc, sa, true);
-							
-							ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
+							EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+							lattice_create_prop_presel(wmn->wm, sc, sa, true, false);
+							curve_create_prop_presel(wmn->wm, sc, sa, true, false);
+							objects_create_prop_presel(wmn->wm, sc, sa, true, false);
 							break;
 					}
 					break;
 				case ND_SELECT:
 					if (sc->scene->toolsettings->uv_flag & UV_SYNC_SELECTION) {
-						EDBM_create_prop_presel(wmn->wm, sc, sa, true);
-						lattice_create_prop_presel(wmn->wm, sc, sa, true);
-						curve_create_prop_presel(wmn->wm, sc, sa, true);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+						lattice_create_prop_presel(wmn->wm, sc, sa, true, false);
+						curve_create_prop_presel(wmn->wm, sc, sa, true, false);
 					}
 					else {
-						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
-						lattice_create_prop_presel(wmn->wm, sc, sa, false);
-						curve_create_prop_presel(wmn->wm, sc, sa, false);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+						lattice_create_prop_presel(wmn->wm, sc, sa, false, false);
+						curve_create_prop_presel(wmn->wm, sc, sa, false, false);
 					}
-					
-					ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 					break;
 			}
 			break;
@@ -1267,10 +1268,10 @@ static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *w
 					/* Adapt proportional mode preselection */
 					if (!(sc->scene->toolsettings->proportional_size == sc->scene->toolsettings->old_proportional_size)) {
 						sc->scene->toolsettings->old_proportional_size = sc->scene->toolsettings->proportional_size;
-						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
-						lattice_create_prop_presel(wmn->wm, sc, sa, false);
-						curve_create_prop_presel(wmn->wm, sc, sa, false);
-						objects_create_prop_presel(wmn->wm, sc, sa, false);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+						lattice_create_prop_presel(wmn->wm, sc, sa, false, false);
+						curve_create_prop_presel(wmn->wm, sc, sa, false, false);
+						objects_create_prop_presel(wmn->wm, sc, sa, false, false);
 						
 						ED_area_tag_redraw_regiontype(sa, RGN_TYPE_WINDOW);
 						break;

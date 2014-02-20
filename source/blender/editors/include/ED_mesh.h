@@ -162,7 +162,7 @@ bool EDBM_presel_pick(struct bContext *C, const int mval[2]);
 void EDBM_selectmode_set(struct BMEditMesh *em);
 void EDBM_selectmode_convert(struct BMEditMesh *em, const short selectmode_old, const short selectmode_new);
 
-void EDBM_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force);
+void EDBM_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force, bool draw);
 
 /* user access this */
 bool EDBM_selectmode_toggle(struct bContext *C, const short selectmode_new,

@@ -3352,6 +3352,10 @@ static void view3d_main_area_draw_objects(const bContext *C, ARegion *ar, const 
 	if (v3d->afterdraw_xraytransp.first) view3d_draw_xraytransp(scene, ar, v3d, 1);
 	
 	ED_region_draw_cb_draw(C, ar, REGION_DRAW_POST_VIEW);
+	if (ar->propcircle_handle) {
+		ED_region_draw_cb_exit(ar->type, ar->propcircle_handle);
+		ar->propcircle_handle = NULL;
+	}
 
 	if (rv3d->rflag & RV3D_CLIPPING)
 		ED_view3d_clipping_disable();

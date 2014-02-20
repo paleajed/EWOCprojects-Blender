@@ -2867,33 +2867,20 @@ static void attach_ndof_data(wmEvent *event, const GHOST_TEventNDOFMotionData *g
 {
 	wmNDOFMotionData *data = MEM_mallocN(sizeof(wmNDOFMotionData), "customdata NDOF");
 
-	const float s = U.ndof_sensitivity;
+	const float ts = U.ndof_sensitivity;
 	const float rs = U.ndof_orbit_sensitivity;
 
-	data->tx = s * ghost->tx;
+	mul_v3_v3fl(data->tvec, &ghost->tx, ts);
+	mul_v3_v3fl(data->rvec, &ghost->rx, rs);
 
-	data->rx = rs * ghost->rx;
-	data->ry = rs * ghost->ry;
-	data->rz = rs * ghost->rz;
-
-	if (U.ndof_flag & NDOF_ZOOM_UPDOWN) {
-		/* rotate so Y is where Z was */
-		data->ty = s * ghost->tz;
-		data->tz = s * ghost->ty;
-		/* maintain handed-ness? or just do what feels right? */
-
-		/* should this affect rotation also?
-		 * initial guess is 'yes', but get user feedback immediately!
-		 */
-#if 0
-		/* after turning this on, my guess becomes 'no' */
-		data->ry = s * ghost->rz;
-		data->rz = s * ghost->ry;
-#endif
-	}
-	else {
-		data->ty = s * ghost->ty;
-		data->tz = s * ghost->tz;
+	/**
+	 * \note
+	 * - optionally swap Y/Z.
+	 * - maintain handed-ness? or just do what feels right? not for now.
+	 * - after testing seems best not to apply this to rotation.
+	 */
+	if (U.ndof_flag & NDOF_PAN_YZ_SWAP_AXIS) {
+		SWAP(float, data->tvec[1], data->tvec[2]);
 	}
 
 	data->dt = ghost->dt;
@@ -3347,3 +3334,49 @@ void WM_set_locked_interface(wmWindowManager *wm, bool lock)
 	 */
 	BKE_spacedata_draw_locks(lock);
 }
+
+
+/* -------------------------------------------------------------------- */
+/* NDOF */
+
+/** \name NDOF Utility Functions
+ * \{ */
+
+
+void WM_event_ndof_pan_get(const wmNDOFMotionData *ndof, float r_pan[3], const bool use_zoom)
+{
+	int z_flag = use_zoom ? NDOF_ZOOM_INVERT : NDOF_PANZ_INVERT_AXIS;
+	r_pan[0] = ndof->tvec[0] * ((U.ndof_flag & NDOF_PANX_INVERT_AXIS) ? -1.0f : 1.0f);
+	r_pan[1] = ndof->tvec[1] * ((U.ndof_flag & NDOF_PANY_INVERT_AXIS) ? -1.0f : 1.0f);
+	r_pan[2] = ndof->tvec[2] * ((U.ndof_flag & z_flag)                ? -1.0f : 1.0f);
+}
+
+void WM_event_ndof_rotate_get(const wmNDOFMotionData *ndof, float r_rot[3])
+{
+	r_rot[0] = ndof->rvec[0] * ((U.ndof_flag & NDOF_ROTX_INVERT_AXIS) ? -1.0f : 1.0f);
+	r_rot[1] = ndof->rvec[1] * ((U.ndof_flag & NDOF_ROTY_INVERT_AXIS) ? -1.0f : 1.0f);
+	r_rot[2] = ndof->rvec[2] * ((U.ndof_flag & NDOF_ROTZ_INVERT_AXIS) ? -1.0f : 1.0f);
+}
+
+float WM_event_ndof_to_axis_angle(const struct wmNDOFMotionData *ndof, float axis[3])
+{
+	float angle;
+	angle = normalize_v3_v3(axis, ndof->rvec);
+
+	axis[0] = axis[0] * ((U.ndof_flag & NDOF_ROTX_INVERT_AXIS) ? -1.0f : 1.0f);
+	axis[1] = axis[1] * ((U.ndof_flag & NDOF_ROTY_INVERT_AXIS) ? -1.0f : 1.0f);
+	axis[2] = axis[2] * ((U.ndof_flag & NDOF_ROTZ_INVERT_AXIS) ? -1.0f : 1.0f);
+
+	return ndof->dt * angle;
+}
+
+void WM_event_ndof_to_quat(const struct wmNDOFMotionData *ndof, float q[4])
+{
+	float axis[3];
+	float angle;
+
+	angle = WM_event_ndof_to_axis_angle(ndof, axis);
+	axis_angle_to_quat(q, axis, angle);
+}
+
+/** \} */

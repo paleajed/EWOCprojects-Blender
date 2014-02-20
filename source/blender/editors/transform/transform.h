@@ -429,7 +429,6 @@ typedef struct TransInfo {
 
 	/* alternative transformation. used to add offset to tracking markers */
 #define T_ALT_TRANSFORM		(1 << 24)
-#define T_TOGGLE_HIDDEN		(1 << 25)	/* node editor: toggle state of the hidden flags */
 
 	/* transforming manipulator only */
 #define T_MANIP_SET			(1 << 25)
@@ -489,7 +488,6 @@ typedef struct TransInfo {
 #define TD_MOVEHANDLE2		(1 << 18)
 #define TD_PBONE_LOCAL_MTX_P (1 << 19)	/* exceptional case with pose bone rotating when a parent bone has 'Local Location' option enabled and rotating also transforms it. */
 #define TD_PBONE_LOCAL_MTX_C (1 << 20)	/* same as above but for a child bone */
-#define TD_HIDDEN		(1 << 21)	/* for hide toggling node editor */
 
 /* transsnap->status */
 #define SNAP_FORCED		1
@@ -514,6 +512,7 @@ void applyAspectRatio(TransInfo *t, float *vec);
 void removeAspectRatio(TransInfo *t, float *vec);
 
 void drawPropCircle(const struct bContext *C, TransInfo *t);
+void drawPreselPropCircle(const struct bContext *C, ARegion *UNUSED(ar), void *arg);
 
 struct wmKeyMap *transform_modal_keymap(struct wmKeyConfig *keyconf);
 

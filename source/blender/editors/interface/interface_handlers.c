@@ -1683,6 +1683,13 @@ static void ui_but_copy_paste(bContext *C, uiBut *but, uiHandleButtonData *data,
 		return;
 	}
 
+	if (mode == 'c') {
+		/* disallow copying from any passwords */
+		if (but->rnaprop && (RNA_property_subtype(but->rnaprop) == PROP_PASSWORD)) {
+			return;
+		}
+	}
+
 	if (mode == 'v') {
 		/* extract first line from clipboard in case of multi-line copies */
 		int pbuf_len;
@@ -3516,13 +3523,16 @@ static int ui_do_but_NUM(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 		/* we can click on the side arrows to increment/decrement,
 		 * or click inside to edit the value directly */
 		float tempf, softmin, softmax;
+		float handlewidth;
 		int temp;
 
 		softmin = but->softmin;
 		softmax = but->softmax;
 
+		handlewidth = min_ff(BLI_rctf_size_x(&but->rect) / 3, BLI_rctf_size_y(&but->rect));
+
 		if (!ui_is_but_float(but)) {
-			if (mx < (but->rect.xmin + BLI_rctf_size_x(&but->rect) / 3 - 3)) {
+			if (mx < (but->rect.xmin + handlewidth)) {
 				button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
 
 				temp = (int)data->value - 1;
@@ -3533,7 +3543,7 @@ static int ui_do_but_NUM(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 
 				button_activate_state(C, but, BUTTON_STATE_EXIT);
 			}
-			else if (mx > (but->rect.xmin + (2 * BLI_rctf_size_x(&but->rect) / 3) + 3)) {
+			else if (mx > (but->rect.xmax - handlewidth)) {
 				button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
 
 				temp = (int)data->value + 1;
@@ -3549,7 +3559,7 @@ static int ui_do_but_NUM(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 			}
 		}
 		else {
-			if (mx < (but->rect.xmin + BLI_rctf_size_x(&but->rect) / 3 - 3)) {
+			if (mx < (but->rect.xmin + handlewidth)) {
 				button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
 
 				tempf = (float)data->value - 0.01f * but->a1;
@@ -3558,7 +3568,7 @@ static int ui_do_but_NUM(bContext *C, uiBlock *block, uiBut *but, uiHandleButton
 
 				button_activate_state(C, but, BUTTON_STATE_EXIT);
 			}
-			else if (mx > but->rect.xmin + (2 * (BLI_rctf_size_x(&but->rect) / 3) + 3)) {
+			else if (mx > but->rect.xmax - handlewidth) {
 				button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
 
 				tempf = (float)data->value + 0.01f * but->a1;
@@ -4400,31 +4410,31 @@ static void ui_ndofedit_but_HSVCUBE(uiBut *but, uiHandleButtonData *data,
 	
 	switch ((int)but->a1) {
 		case UI_GRAD_SV:
-			hsv[2] += ndof->ry * sensitivity;
-			hsv[1] += ndof->rx * sensitivity;
+			hsv[2] += ndof->rvec[2] * sensitivity;
+			hsv[1] += ndof->rvec[0] * sensitivity;
 			break;
 		case UI_GRAD_HV:
-			hsv[0] += ndof->ry * sensitivity;
-			hsv[2] += ndof->rx * sensitivity;
+			hsv[0] += ndof->rvec[2] * sensitivity;
+			hsv[2] += ndof->rvec[0] * sensitivity;
 			break;
 		case UI_GRAD_HS:
-			hsv[0] += ndof->ry * sensitivity;
-			hsv[1] += ndof->rx * sensitivity;
+			hsv[0] += ndof->rvec[2] * sensitivity;
+			hsv[1] += ndof->rvec[0] * sensitivity;
 			break;
 		case UI_GRAD_H:
-			hsv[0] += ndof->ry * sensitivity;
+			hsv[0] += ndof->rvec[2] * sensitivity;
 			break;
 		case UI_GRAD_S:
-			hsv[1] += ndof->ry * sensitivity;
+			hsv[1] += ndof->rvec[2] * sensitivity;
 			break;
 		case UI_GRAD_V:
-			hsv[2] += ndof->ry * sensitivity;
+			hsv[2] += ndof->rvec[2] * sensitivity;
 			break;
 		case UI_GRAD_V_ALT:
 			/* vertical 'value' strip */
 			
 			/* exception only for value strip - use the range set in but->min/max */
-			hsv[2] += ndof->rx * sensitivity;
+			hsv[2] += ndof->rvec[0] * sensitivity;
 			
 			CLAMP(hsv[2], but->softmin, but->softmax);
 			break;
@@ -4647,14 +4657,14 @@ static void ui_ndofedit_but_HSVCIRCLE(uiBut *but, uiHandleButtonData *data,
 	v[1] = r * sinf(phi);
 	
 	/* Use ndof device y and x rotation to move the vector in 2d space */
-	v[0] += ndof->rz * sensitivity;
-	v[1] += ndof->rx * sensitivity;
+	v[0] += ndof->rvec[2] * sensitivity;
+	v[1] += ndof->rvec[0] * sensitivity;
 
 	/* convert back to polar coords on circle */
 	phi = atan2f(v[0], v[1]) / (2.0f * (float)M_PI) + 0.5f;
 	
-	/* use ndof z rotation to additionally rotate hue */
-	phi += ndof->ry * sensitivity * 0.5f;
+	/* use ndof Y rotation to additionally rotate hue */
+	phi += ndof->rvec[1] * sensitivity * 0.5f;
 	r = len_v2(v);
 
 	/* convert back to hsv values, in range [0,1] */

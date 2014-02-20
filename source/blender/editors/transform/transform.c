@@ -414,26 +414,34 @@ void projectIntViewEx(TransInfo *t, const float vec[3], int adr[2], const eV3DPr
 		SpaceClip *sc = t->sa->spacedata.first;
 
 		if (t->options & CTX_MASK) {
-			/* not working quite right, TODO (see above too) */
-			float aspx, aspy;
-			float v[2];
+			MovieClip *clip = ED_space_clip_get_clip(sc);
 
-			ED_space_clip_get_aspect(sc, &aspx, &aspy);
+			if (clip) {
+				/* not working quite right, TODO (see above too) */
+				float aspx, aspy;
+				float v[2];
 
-			copy_v2_v2(v, vec);
+				ED_space_clip_get_aspect(sc, &aspx, &aspy);
 
-			v[0] = v[0] / aspx;
-			v[1] = v[1] / aspy;
+				copy_v2_v2(v, vec);
 
-			BKE_mask_coord_to_movieclip(sc->clip, &sc->user, v, v);
+				v[0] = v[0] / aspx;
+				v[1] = v[1] / aspy;
 
-			v[0] = v[0] / aspx;
-			v[1] = v[1] / aspy;
+				BKE_mask_coord_to_movieclip(sc->clip, &sc->user, v, v);
 
-			ED_clip_point_stable_pos__reverse(sc, t->ar, v, v);
+				v[0] = v[0] / aspx;
+				v[1] = v[1] / aspy;
 
-			adr[0] = v[0];
-			adr[1] = v[1];
+				ED_clip_point_stable_pos__reverse(sc, t->ar, v, v);
+
+				adr[0] = v[0];
+				adr[1] = v[1];
+			}
+			else {
+				adr[0] = 0;
+				adr[1] = 0;
+			}
 		}
 		else if (t->options & CTX_MOVIECLIP) {
 			float v[2], aspx, aspy;
@@ -1444,13 +1452,6 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 					handled = true;
 				}
 				break;
-			case HKEY:
-				if (t->spacetype == SPACE_NODE) {
-					t->flag ^= T_TOGGLE_HIDDEN;
-					t->redraw |= TREDRAW_HARD;
-					handled = true;
-				}
-				break;
 			default:
 				break;
 		}
@@ -1815,6 +1816,29 @@ static void drawTransformView(const struct bContext *C, ARegion *UNUSED(ar), voi
 	/* edge slide, vert slide */
 	drawEdgeSlide(C, t);
 	drawVertSlide(C, t);
+}
+
+void drawPreselPropCircle(const struct bContext *C, ARegion *UNUSED(ar), void *arg)
+{
+	TransInfo *t = arg;
+	TransData *td;
+	int i;
+	
+	drawPropCircle(C, t);
+	if (t->data) {
+		for (i = 0, td = t->data; i < t->total; i++, td++) {
+			if (td->flag & TD_BEZTRIPLE)
+				MEM_freeN(td->hdata);
+		}
+		MEM_freeN(t->data);
+	}
+	if (t->spacetype == SPACE_IMAGE) {
+		if (t->data2d)
+			MEM_freeN(t->data2d);
+	}
+	if (t->ext)
+		MEM_freeN(t->ext);
+	MEM_freeN(t);
 }
 
 /* just draw a little warning message in the top-right corner of the viewport to warn that autokeying is enabled */

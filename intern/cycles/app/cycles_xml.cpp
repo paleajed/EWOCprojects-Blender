@@ -268,6 +268,7 @@ static void xml_read_integrator(const XMLReadState& state, pugi::xml_node node)
 	xml_read_bool(&integrator->transparent_shadows, node, "transparent_shadows");
 	
 	/* Volume */
+	xml_read_int(&integrator->volume_homogeneous_sampling, node, "volume_homogeneous_sampling");
 	xml_read_float(&integrator->volume_step_size, node, "volume_step_size");
 	xml_read_int(&integrator->volume_max_steps, node, "volume_max_steps");
 	
@@ -288,21 +289,6 @@ static void xml_read_camera(const XMLReadState& state, pugi::xml_node node)
 
 	xml_read_int(&cam->width, node, "width");
 	xml_read_int(&cam->height, node, "height");
-
-	float aspect = (float)cam->width/(float)cam->height;
-
-	if(cam->width >= cam->height) {
-		cam->viewplane.left = -aspect;
-		cam->viewplane.right = aspect;
-		cam->viewplane.bottom = -1.0f;
-		cam->viewplane.top = 1.0f;
-	}
-	else {
-		cam->viewplane.left = -1.0f;
-		cam->viewplane.right = 1.0f;
-		cam->viewplane.bottom = -1.0f/aspect;
-		cam->viewplane.top = 1.0f/aspect;
-	}
 
 	if(xml_read_float(&cam->fov, node, "fov"))
 		cam->fov *= M_PI/180.0f;
@@ -332,7 +318,6 @@ static void xml_read_camera(const XMLReadState& state, pugi::xml_node node)
 
 	xml_read_float(&cam->sensorwidth, node, "sensorwidth");
 	xml_read_float(&cam->sensorheight, node, "sensorheight");
-
 
 	cam->matrix = state.tfm;
 
@@ -765,6 +750,8 @@ static void xml_read_shader(const XMLReadState& state, pugi::xml_node node)
 static void xml_read_background(const XMLReadState& state, pugi::xml_node node)
 {
 	Shader *shader = state.scene->shaders[state.scene->default_background];
+	
+	xml_read_bool(&shader->heterogeneous_volume, node, "heterogeneous_volume");
 
 	xml_read_shader_graph(state, shader, node);
 }
@@ -944,6 +931,26 @@ static void xml_read_light(const XMLReadState& state, pugi::xml_node node)
 {
 	Light *light = new Light();
 	light->shader = state.shader;
+
+	/* Light Type
+	 * 0: Point, 1: Sun, 3: Area, 5: Spot */
+	int type = 0;
+	xml_read_int(&type, node, "type");
+	light->type = (LightType)type;
+
+	/* Spot Light */
+	xml_read_float(&light->spot_angle, node, "spot_angle");
+	xml_read_float(&light->spot_smooth, node, "spot_smooth");
+
+	/* Area Light */
+	xml_read_float(&light->sizeu, node, "sizeu");
+	xml_read_float(&light->sizev, node, "sizev");
+	xml_read_float3(&light->axisu, node, "axisu");
+	xml_read_float3(&light->axisv, node, "axisv");
+	
+	/* Generic */
+	xml_read_float(&light->size, node, "size");
+	xml_read_float3(&light->dir, node, "dir");
 	xml_read_float3(&light->co, node, "P");
 	light->co = transform_point(&state.tfm, light->co);
 

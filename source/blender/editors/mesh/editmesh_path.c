@@ -351,14 +351,14 @@ static bool mouse_mesh_shortest_path_edge(ViewContext *vc, bool presel)
 					me->drawflag |= ME_DRAWBWEIGHTS;
 					break;
 #ifdef WITH_FREESTYLE
-				case EDGE_MODE_TAG_FREESTYLE:
-					me->drawflag |= ME_DRAW_FREESTYLE_EDGE;
-					break;
+			case EDGE_MODE_TAG_FREESTYLE:
+				me->drawflag |= ME_DRAW_FREESTYLE_EDGE;
+				break;
 #endif
 			}
-	
-			EDBM_update_generic(em, false, false);
 		}
+
+		EDBM_update_generic(em, false, false);
 
 		return true;
 	}
@@ -473,17 +473,23 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 {
 	ViewContext vc;
 	BMEditMesh *em;
+	BMElem *ele;
 	bool presel = RNA_boolean_get(op->ptr, "presel");
 	Scene *scene = CTX_data_scene(C);
 	if (presel && !scene->toolsettings->use_presel) return OPERATOR_CANCELLED;
-
-	view3d_operator_needs_opengl(C);
 
 	em_setup_viewcontext(C, &vc);
 	copy_v2_v2_int(vc.mval, event->mval);
 	em = vc.em;
 
-	if (em->selectmode & SCE_SELECT_VERTEX) {
+	ele = BM_mesh_active_elem_get(em->bm);
+	if (ele == NULL) {
+		return OPERATOR_PASS_THROUGH;
+	}
+
+	view3d_operator_needs_opengl(C);
+
+	if ((em->selectmode & SCE_SELECT_VERTEX) && (ele->head.htype == BM_VERT)) {
 		BLI_ghash_clear(em->presel_verts, NULL, NULL);
 		if (mouse_mesh_shortest_path_vert(&vc, presel)) {
 			if (presel) {
@@ -498,7 +504,7 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 			return OPERATOR_PASS_THROUGH;
 		}
 	}
-	else if (em->selectmode & SCE_SELECT_EDGE) {
+	else if ((em->selectmode & SCE_SELECT_EDGE) && (ele->head.htype == BM_EDGE)) {
 		BLI_ghash_clear(em->presel_edges, NULL, NULL);
 		if (mouse_mesh_shortest_path_edge(&vc, presel)) {
 			if (presel) {
@@ -513,7 +519,7 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 			return OPERATOR_PASS_THROUGH;
 		}
 	}
-	else if (em->selectmode & SCE_SELECT_FACE) {
+	else if ((em->selectmode & SCE_SELECT_FACE) && (ele->head.htype == BM_FACE)) {
 		BLI_ghash_clear(em->presel_faces, NULL, NULL);
 		if (mouse_mesh_shortest_path_face(&vc, presel)) {
 			if (presel) {

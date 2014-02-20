@@ -88,6 +88,7 @@
 #include "ED_lattice.h"
 #include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_util.h"
 #include "ED_image.h"
 
@@ -2030,7 +2031,7 @@ void OBJECT_OT_game_physics_copy(struct wmOperatorType *ot)
 
 /* -------------------- proportional preselection --------------------------- */
 
-void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -2040,6 +2041,7 @@ void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *s
 	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
 	ARegion *ar;
 	bContext *C = CTX_create();
+	View3D *v3d = sa->spacedata.first;
 	Base *base;
 	int i;
 
@@ -2093,11 +2095,23 @@ void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *s
 		}
 	}
 	
+	if (draw && !ar->propcircle_handle) {
+		t->flag |= T_PROP_EDIT;
+		t->around = v3d->around;
+		t->ar = ar;
+		t->view = v3d;
+		calculateCenter(t);
+		t->prop_size = ts->proportional_size;
+		ar->propcircle_handle = ED_region_draw_cb_activate(t->ar->type, drawPreselPropCircle, t, REGION_DRAW_POST_VIEW);
+	}
+	else {
+		if (t->data)
+			MEM_freeN(t->data);
+		if (t->ext)
+			MEM_freeN(t->ext);
+		MEM_freeN(t);
+	}
+		
 	CTX_free(C);
-	if (t->data)
-		MEM_freeN(t->data);
-	if (t->ext)
-		MEM_freeN(t->ext);
-	MEM_freeN(t);
 	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
 }

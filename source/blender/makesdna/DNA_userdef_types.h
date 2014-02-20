@@ -794,11 +794,11 @@ typedef enum eNdof_Flag {
 	/* actually... users probably don't care about what the mode
 	 * is called, just that it feels right */
 	/* zoom is up/down if this flag is set (otherwise forward/backward) */
-	NDOF_ZOOM_UPDOWN        = (1 << 7),
+	NDOF_PAN_YZ_SWAP_AXIS   = (1 << 7),
 	NDOF_ZOOM_INVERT        = (1 << 8),
-	NDOF_ROTATE_INVERT_AXIS = (1 << 9),
-	NDOF_TILT_INVERT_AXIS   = (1 << 10),
-	NDOF_ROLL_INVERT_AXIS   = (1 << 11),
+	NDOF_ROTX_INVERT_AXIS   = (1 << 9),
+	NDOF_ROTY_INVERT_AXIS   = (1 << 10),
+	NDOF_ROTZ_INVERT_AXIS   = (1 << 11),
 	NDOF_PANX_INVERT_AXIS   = (1 << 12),
 	NDOF_PANY_INVERT_AXIS   = (1 << 13),
 	NDOF_PANZ_INVERT_AXIS   = (1 << 14),

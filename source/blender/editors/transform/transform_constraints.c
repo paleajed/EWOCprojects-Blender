@@ -731,7 +731,7 @@ void drawConstraint(TransInfo *t)
 	}
 }
 
-/* called from drawview.c, as an extra per-window draw option */
+/* called from drawview.c, as an extra per-window draw option -- (not anymore? - Gert De Roost)*/
 void drawPropCircle(const struct bContext *C, TransInfo *t)
 {
 	if (t->flag & T_PROP_EDIT) {

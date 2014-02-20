@@ -247,6 +247,8 @@ typedef struct ARegion {
 	
 	char *headerstr;			/* use this string to draw info */
 	void *regiondata;			/* XXX 2.50, need spacedata equivalent? */
+	
+	void *propcircle_handle;	/* handle of prop circle drawing when setting prop size with TRANSFORM_OT_prop_size */
 } ARegion;
 
 /* swap */

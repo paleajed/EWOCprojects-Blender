@@ -49,8 +49,10 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "ED_screen.h"
+#include "ED_curve.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
+#include "ED_screen.h"
 
 #include "transform.h"
 
@@ -481,8 +483,12 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 static int propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
 {
-	ToolSettings *ts = CTX_data_scene(C)->toolsettings;
+	Scene *scn = CTX_data_scene(C);
+	ToolSettings *ts = scn->toolsettings;
 	bool smaller = RNA_boolean_get(op->ptr, "smaller");
+	bScreen *sc = CTX_wm_screen(C);
+	ScrArea *sa = CTX_wm_area(C);
+	wmWindowManager *wm = CTX_wm_manager(C);
 	
 	if (ts->use_prop_presel) {
 		if (smaller) {
@@ -492,12 +498,25 @@ static int propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
 		}
 		else
 			ts->proportional_size *= 1.1f;
-	}
-
-	WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);		/* trigger presel calc */
-	WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, NULL);	/* trigger presel calc */
 	
-	return OPERATOR_FINISHED;
+		if (scn->obedit) {
+			if (scn->obedit->type == OB_MESH)
+				EDBM_create_prop_presel(wm, sc, sa, false, true);
+			if (scn->obedit->type == OB_LATTICE)
+				lattice_create_prop_presel(wm, sc, sa, false, true);
+			if ((scn->obedit->type == OB_CURVE) || (scn->obedit->type == OB_SURF))
+				curve_create_prop_presel(wm, sc, sa, false, true);
+		}
+		else {
+			objects_create_prop_presel(wm, sc, sa, false, true);
+		}
+		return OPERATOR_FINISHED;
+	}
+	else {
+		return OPERATOR_CANCELLED;
+	}
+		
+	
 }
 
 

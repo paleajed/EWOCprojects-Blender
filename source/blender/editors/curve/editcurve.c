@@ -62,6 +62,7 @@
 #include "ED_keyframes_edit.h"
 #include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_transform.h"
 #include "ED_types.h"
 #include "ED_util.h"
@@ -6896,7 +6897,7 @@ static void curve_palpha_to_zero(ListBase *nurbs)
 	}
 }
 
-void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force)
+void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -6910,6 +6911,7 @@ void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa,
 	ListBase *nurbs;
 	int i;
 	ARegion *ar;
+	View3D *v3d = sa->spacedata.first;
 	bContext *C = CTX_create();
 	
 	if (!screen->scene->obedit) {
@@ -6977,15 +6979,27 @@ void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa,
 		}
 	}
 	
-	CTX_free(C);
-	if (t->data) {
-		/* free data malloced per trans-data */
-		for (i = 0, td = t->data; i < t->total; i++, td++) {
-			if (td->flag & TD_BEZTRIPLE)
-				MEM_freeN(td->hdata);
-		}
-		MEM_freeN(t->data);
+	if (draw && !ar->propcircle_handle) {
+		t->flag |= T_PROP_EDIT;
+		t->around = v3d->around;
+		t->ar = ar;
+		t->view = v3d;
+		calculateCenter(t);
+		t->prop_size = ts->proportional_size;
+		ar->propcircle_handle = ED_region_draw_cb_activate(t->ar->type, drawPreselPropCircle, t, REGION_DRAW_POST_VIEW);
 	}
-	MEM_freeN(t);
+	else {
+		if (t->data) {
+			/* free data malloced per trans-data */
+			for (i = 0, td = t->data; i < t->total; i++, td++) {
+				if (td->flag & TD_BEZTRIPLE)
+					MEM_freeN(td->hdata);
+			}
+			MEM_freeN(t->data);
+		}
+		MEM_freeN(t);
+	}
+		
+	CTX_free(C);
 	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
 }
