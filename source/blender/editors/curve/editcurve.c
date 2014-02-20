@@ -6897,7 +6897,7 @@ static void curve_palpha_to_zero(ListBase *nurbs)
 	}
 }
 
-void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
+void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -6927,7 +6927,7 @@ void curve_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa,
 	}
 	nurbs = BKE_curve_editNurbs_get(cu);
 	curve_palpha_to_zero(nurbs);
-	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF)) {
 		CTX_free(C);
 		MEM_freeN(t);
 		return;

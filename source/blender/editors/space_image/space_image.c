@@ -454,7 +454,7 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					break;
 				case ND_TRANSFORM_DONE:
 					/* Adapt proportional mode preselection */
-					EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+					EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 			}
 			break;
 		case NC_IMAGE:
@@ -508,7 +508,7 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					switch (wmn->action) {
 						case NA_ADDED:
 							/* Adapt proportional mode preselection */
-							EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+							EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 
 							image_scopes_tag_refresh(sa);
 							ED_area_tag_refresh(sa);
@@ -518,12 +518,12 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 				case ND_SELECT:
 					/* Adapt proportional mode preselection */
 					if (wmn->action != NA_PAINTING)
-						EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 				case ND_PRESELECT:
 					switch (wmn->action) {
 						case NA_ADDED:
 							/* Adapt proportional mode preselection */
-							EDBM_create_prop_presel(wmn->wm, sc, sa, true, false);
+							EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 							break;
 					}
 					image_scopes_tag_refresh(sa);
@@ -541,7 +541,7 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					/* Adapt proportional mode preselection */
 					if (!(sc->scene->toolsettings->proportional_size == sc->scene->toolsettings->old_proportional_size)) {
 						sc->scene->toolsettings->old_proportional_size = sc->scene->toolsettings->proportional_size;
-						EDBM_create_prop_presel(wmn->wm, sc, sa, false, false);
+						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 
 						ED_area_tag_refresh(sa);
 						ED_area_tag_redraw(sa);
@@ -723,6 +723,10 @@ static void image_main_area_draw(const bContext *C, ARegion *ar)
 	}
 
 	ED_region_draw_cb_draw(C, ar, REGION_DRAW_POST_VIEW);
+	if (ar->propcircle_handle) {
+		ED_region_draw_cb_exit(ar->type, ar->propcircle_handle);
+		ar->propcircle_handle = NULL;
+	}
 
 	if (sima->flag & SI_SHOW_GPENCIL) {
 		/* Grease Pencil too (in addition to UV's) */

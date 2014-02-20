@@ -177,8 +177,8 @@ void ED_object_constraint_dependency_update(struct Main *bmain, struct Object *o
 /* object_lattice.c */
 bool mouse_lattice(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle, bool presel);
 void undo_push_lattice(struct bContext *C, const char *name);
-void lattice_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force, bool draw);
-void objects_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force, bool draw);
+void lattice_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool draw);
+void objects_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool draw);
 
 /* object_lattice.c */
 

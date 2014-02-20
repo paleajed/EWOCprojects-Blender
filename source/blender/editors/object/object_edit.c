@@ -2031,7 +2031,7 @@ void OBJECT_OT_game_physics_copy(struct wmOperatorType *ot)
 
 /* -------------------- proportional preselection --------------------------- */
 
-void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
+void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -2045,7 +2045,7 @@ void objects_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *s
 	Base *base;
 	int i;
 
-	if ((screen->scene->obedit) || (!ts->use_prop_presel) || (ts->proportional_objects == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+	if ((screen->scene->obedit) || (!ts->use_prop_presel) || (ts->proportional_objects == PROP_EDIT_OFF)) {
 		for (base = screen->scene->base.first; base; base = base->next) {
 			base->object->palpha = 0;
 		}

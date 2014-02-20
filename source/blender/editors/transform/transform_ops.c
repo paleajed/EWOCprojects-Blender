@@ -493,22 +493,20 @@ static int propsize_invoke(bContext *C, wmOperator *op, wmEvent *UNUSED(event))
 	if (ts->use_prop_presel) {
 		if (smaller) {
 			ts->proportional_size *= 0.9f;
-			if (ts->proportional_size < 0.1)
-				ts->proportional_size = 0.1;
 		}
 		else
 			ts->proportional_size *= 1.1f;
 	
 		if (scn->obedit) {
 			if (scn->obedit->type == OB_MESH)
-				EDBM_create_prop_presel(wm, sc, sa, false, true);
+				EDBM_create_prop_presel(wm, sc, sa, true);
 			if (scn->obedit->type == OB_LATTICE)
-				lattice_create_prop_presel(wm, sc, sa, false, true);
+				lattice_create_prop_presel(wm, sc, sa, true);
 			if ((scn->obedit->type == OB_CURVE) || (scn->obedit->type == OB_SURF))
-				curve_create_prop_presel(wm, sc, sa, false, true);
+				curve_create_prop_presel(wm, sc, sa, true);
 		}
 		else {
-			objects_create_prop_presel(wm, sc, sa, false, true);
+			objects_create_prop_presel(wm, sc, sa, true);
 		}
 		return OPERATOR_FINISHED;
 	}
@@ -1174,9 +1172,10 @@ void transform_keymap_for_space(wmKeyConfig *keyconf, wmKeyMap *keymap, int spac
 
 			kmi = WM_keymap_add_item(keymap, "WM_OT_context_menu_enum", TABKEY, KM_PRESS, KM_SHIFT | KM_CTRL, 0);
 			RNA_string_set(kmi->ptr, "data_path", "tool_settings.snap_uv_element");
-			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_OSKEY, 0);
+
+			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELUPMOUSE, KM_ANY, KM_SHIFT | KM_ALT | KM_CTRL, 0);
 			RNA_boolean_set(kmi->ptr, "smaller", TRUE);
-			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_OSKEY, 0);
+			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_prop_size", WHEELDOWNMOUSE, KM_ANY, KM_SHIFT | KM_ALT | KM_CTRL, 0);
 			RNA_boolean_set(kmi->ptr, "smaller", FALSE);
 			break;
 			

@@ -75,7 +75,7 @@ int     isNurbsel(struct Nurb *nu);
 
 int     join_curve_exec(struct bContext *C, struct wmOperator *op);
 
-void 	curve_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool force, bool draw);
+void 	curve_create_prop_presel(struct wmWindowManager *wm, struct bScreen *screen, struct ScrArea *sa, bool draw);
 
 /* editfont.h */
 void    undo_push_font(struct bContext *C, const char *name);

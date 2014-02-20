@@ -1005,7 +1005,7 @@ void undo_push_lattice(bContext *C, const char *name)
 
 /* -------------------- proportional preselection --------------------------- */
 
-void lattice_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
+void lattice_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -1033,7 +1033,7 @@ void lattice_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *s
 	}
 	bp = lt->editlatt->latt->def;
 	N = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF)) {
 		for (i = 0; i < N; i++, bp++) {
 			bp->palpha = 0;
 		}

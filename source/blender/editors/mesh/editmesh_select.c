@@ -3361,7 +3361,7 @@ void MESH_OT_loop_to_region(wmOperatorType *ot)
 
 /* -------------------- preselection --------------------------------------------- */
 
-void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool force, bool draw)
+void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool draw)
 {
 	/* sets alpha for proportional preselection */
 	/* uses the transform code: to avoid much code duplication */
@@ -3400,7 +3400,7 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 		return;
 	}
 	em = BKE_editmesh_from_object(screen->scene->obedit);
-	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF) || (!force && (sa != wm->act_area))) {
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF)) {
 		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
 		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
 		BLI_ghash_free(temp_elems, NULL, NULL);
@@ -3409,8 +3409,6 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 		MEM_freeN(t);
 		return;
 	}
-	BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
-	BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
 	
 	for (ar = sa->regionbase.first; ar; ar = ar->next) {
 		if (ar->regiontype == RGN_TYPE_WINDOW) {
@@ -3541,6 +3539,7 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 	if (draw && !ar->propcircle_handle) {
 		t->flag |= T_PROP_EDIT;
 		t->around = v3d->around;
+		t->sa = sa;
 		t->ar = ar;
 		t->view = v3d;
 		calculateCenter(t);
