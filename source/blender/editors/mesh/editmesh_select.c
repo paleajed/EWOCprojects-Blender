@@ -3431,8 +3431,6 @@ void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, 
 				BLI_ghash_free(temp_elems, NULL, NULL);
 				BLI_ghash_free(temp_faces, NULL, NULL);
 				BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
-				BLI_ghash_free(temp_elems, NULL, NULL);
-				BLI_ghash_free(temp_faces, NULL, NULL);
 				CTX_free(C);
 				MEM_freeN(t);
 				return;

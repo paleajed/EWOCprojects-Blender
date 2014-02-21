@@ -1228,6 +1228,7 @@ static void space_view3d_listener(bScreen *sc, ScrArea *sa, struct wmNotifier *w
 				case ND_DATA:
 					switch (wmn->action) {
 						case NA_ADDED:
+						case NA_EDITED:
 							/* Adapt proportional mode preselection */
 							EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 							lattice_create_prop_presel(wmn->wm, sc, sa, false);

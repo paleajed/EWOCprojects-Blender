@@ -1142,13 +1142,10 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
 	MVert *mv = cddm->mvert;
 	MFace *mf = cddm->mface;
+	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "cddm propfaceidxs to faces");
 	GHashIterator *iter;
 	BMFace *efa;
 	int i, orig;
-	int length = BLI_ghash_size(em->prop3d_faces);
-	int *indices = MEM_callocN(length * sizeof(int), "prop presel face indices");
-	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "prop presel faces");
-	int pos = 0;
 	float alphafac = (float)prop_col[3] / 255.0f;
 	
 	/* double lookup */
@@ -1163,9 +1160,7 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	efa = (BMFace *)BLI_ghashIterator_getKey(iter);
 	while (efa) {
 		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
-			indices[pos] = efa->head.index;
-			faces[pos] = efa;
-			pos++;
+			BLI_ghash_insert(idxstofaces, efa->head.index, efa);
 		}
 	
 		BLI_ghashIterator_step(iter);
@@ -1174,28 +1169,19 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	BLI_ghashIterator_free(iter);
 	
 	glEnable(GL_BLEND);	
+	glShadeModel(GL_SMOOTH);
 	if (!occluded)
 		glDisable(GL_DEPTH_TEST);
 	mf = cddm->mface;
 	for (i = 0; i < dm->numTessFaceData; i++, mf++) {
-		int j;
-		
 		orig = (index_mf_to_mpoly) ? DM_origindex_mface_mpoly(index_mf_to_mpoly, index_mp_to_orig, i) : i;
 
-		efa = NULL;
-		for (j = 0; j < pos; j++) {
-			if (indices[j] == orig) {
-				efa = faces[j];
-				break;
-			}
-		}
+		efa = BLI_ghash_lookup(idxstofaces, orig);
 		
 		if (efa) {
 			prop_col[3] = (char)BLI_ghash_lookup(em->prop3d_faces, efa) * alphafac;
 			glColor4ubv(prop_col);
-			printf("%d\n", prop_col[3]);
 		
-			glShadeModel(GL_SMOOTH);
 			glBegin(mf->v4 ? GL_QUADS : GL_TRIANGLES);
 	
 			glVertex3fv(mv[mf->v1].co);
@@ -1209,9 +1195,6 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	}
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
-	
-	MEM_freeN(indices);
-	MEM_freeN(faces);
 }
 
 

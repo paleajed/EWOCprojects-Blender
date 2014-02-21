@@ -54,6 +54,9 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "WM_api.h"
+#include "WM_types.h"
+
 #include "util_intern.h"
 
 /* ***************** generic editmode undo system ********************* */
@@ -313,7 +316,8 @@ void undo_editmode_step(bContext *C, int step)
 	}
 
 	DAG_id_tag_update(&obedit->id, OB_RECALC_DATA);
-
+	WM_main_add_notifier(NC_GEOM | ND_DATA | NA_EDITED, NULL);
+	
 	/* XXX notifiers */
 }
 

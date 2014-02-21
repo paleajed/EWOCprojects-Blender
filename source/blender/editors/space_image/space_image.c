@@ -507,6 +507,7 @@ static void image_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 				case ND_DATA:
 					switch (wmn->action) {
 						case NA_ADDED:
+						case NA_EDITED:
 							/* Adapt proportional mode preselection */
 							EDBM_create_prop_presel(wmn->wm, sc, sa, false);
 

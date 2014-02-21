@@ -2627,25 +2627,20 @@ static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned 
 {
 	GHashIterator *iter;
 	BMFace *efa;
+	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "ccgdm propfaceidxs to faces");
 	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
 	CCGSubSurf *ss = ccgdm->ss;
 	CCGKey key;
 	int gridSize = ccgSubSurf_getGridSize(ss);
 	int gridFaces = gridSize - 1;
 	int i, totface;
-	int length = BLI_ghash_size(em->prop3d_faces);
-	int *indices = MEM_callocN(length * sizeof(int), "prop presel face indices");
-	BMFace **faces = MEM_callocN(length * sizeof(BMFace*), "prop presel faces");
-	int pos = 0;
 	float alphafac = (float)prop_col[3] / 255.0f;
 	
 	iter = BLI_ghashIterator_new(em->prop3d_faces);
 	efa = BLI_ghashIterator_getKey(iter);
 	while (efa) {
 		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
-			indices[pos] = efa->head.index;
-			faces[pos] = efa;
-			pos++;
+			BLI_ghash_insert(idxstofaces, efa->head.index, efa);
 		}
 	
 		BLI_ghashIterator_step(iter);
@@ -2663,16 +2658,9 @@ static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned 
 		CCGFace *f = ccgdm->faceMap[i].face;
 		int S, x, y, numVerts = ccgSubSurf_getFaceNumVerts(f);
 		const int index = ccgDM_getFaceMapIndex(ss, f);
-		int j;
 
-		efa = NULL;
-		for (j = 0; j < pos; j++) {
-			if (indices[j] == index) {
-				efa = faces[j];
-				break;
-			}
-		}
-			
+		efa = BLI_ghash_lookup(idxstofaces, index);
+		
 		if (efa) {
 			prop_col[3] = (unsigned char)BLI_ghash_lookup(em->prop3d_faces, efa) * alphafac;
 			glColor4ubv(prop_col);
@@ -2706,9 +2694,6 @@ static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned 
 	}
 	glEnable(GL_DEPTH_TEST);	
 	glDisable(GL_BLEND);
-	
-	MEM_freeN(indices);
-	MEM_freeN(faces);
 }
 
 
