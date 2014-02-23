@@ -783,13 +783,10 @@ typedef enum eNdof_Flag {
 	NDOF_SHOULD_ZOOM    = (1 << 4),
 	NDOF_SHOULD_ROTATE  = (1 << 5),
 
-	/* orbit navigation modes
-	 * only two options, so it's sort of a hybrid bool/enum
-	 * if ((U.ndof_flag & NDOF_ORBIT_MODE) == NDOF_OM_OBJECT)... */
+	/* orbit navigation modes */
 
-	// NDOF_ORBIT_MODE     = (1 << 6),
-	// #define NDOF_OM_TARGETCAMERA 0
-	// #define NDOF_OM_OBJECT      NDOF_ORBIT_MODE
+	/* exposed as Orbit|Explore in the UI */
+	NDOF_MODE_ORBIT      = (1 << 6),
 
 	/* actually... users probably don't care about what the mode
 	 * is called, just that it feels right */
@@ -804,6 +801,8 @@ typedef enum eNdof_Flag {
 	NDOF_PANZ_INVERT_AXIS   = (1 << 14),
 	NDOF_TURNTABLE          = (1 << 15),
 } eNdof_Flag;
+
+#define NDOF_PIXELS_PER_SECOND 600.0f
 
 /* compute_device_type */
 typedef enum eCompute_Device_Type {

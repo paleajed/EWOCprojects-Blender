@@ -1184,6 +1184,7 @@ static void createTransArmatureVerts(TransInfo *t)
 				}
 			}
 			else {
+				const float z_axis[3] = {0.0f, 0.0f, 1.0f};
 				if (ebo->flag & BONE_TIPSEL) {
 					copy_v3_v3(td->iloc, ebo->tail);
 					copy_v3_v3(td->center, (t->around == V3D_LOCAL) ? ebo->head : td->iloc);
@@ -1198,8 +1199,9 @@ static void createTransArmatureVerts(TransInfo *t)
 					ED_armature_ebone_to_mat3(ebo, td->axismtx);
 
 					if ((ebo->flag & BONE_ROOTSEL) == 0) {
+						/* To fix roll, see comments in transform_generic.c::recalcData_objects() */
 						td->extra = ebo;
-						td->ival = ebo->roll;
+						td->ival = ebo->roll - ED_rollBoneToVector(ebo, z_axis, false);
 					}
 
 					td->ext = NULL;
@@ -1221,8 +1223,9 @@ static void createTransArmatureVerts(TransInfo *t)
 
 					ED_armature_ebone_to_mat3(ebo, td->axismtx);
 
-					td->extra = ebo; /* to fix roll */
-					td->ival = ebo->roll;
+					/* To fix roll, see comments in transform_generic.c::recalcData_objects() */
+					td->extra = ebo;
+					td->ival = ebo->roll - ED_rollBoneToVector(ebo, z_axis, false);
 
 					td->ext = NULL;
 					td->val = NULL;

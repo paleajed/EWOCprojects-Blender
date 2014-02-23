@@ -892,15 +892,20 @@ static void manipulator_axis_order(RegionView3D *rv3d, int r_axis_order[3])
 
 /* viewmatrix should have been set OK, also no shademode! */
 static void draw_manipulator_axes_single(View3D *v3d, RegionView3D *rv3d, int colcode,
-                                         int flagx, int flagy, int flagz, int axis)
+                                         int flagx, int flagy, int flagz, int axis,
+                                         const bool is_picksel)
 {
 	switch (axis) {
 		case 0:
 			/* axes */
 			if (flagx) {
-				manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
-				if (flagx & MAN_SCALE_X) glLoadName(MAN_SCALE_X);
-				else if (flagx & MAN_TRANS_X) glLoadName(MAN_TRANS_X);
+				if (is_picksel) {
+					if      (flagx & MAN_SCALE_X) glLoadName(MAN_SCALE_X);
+					else if (flagx & MAN_TRANS_X) glLoadName(MAN_TRANS_X);
+				}
+				else {
+					manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
+				}
 				glBegin(GL_LINES);
 				glVertex3f(0.2f, 0.0f, 0.0f);
 				glVertex3f(1.0f, 0.0f, 0.0f);
@@ -909,9 +914,13 @@ static void draw_manipulator_axes_single(View3D *v3d, RegionView3D *rv3d, int co
 			break;
 		case 1:
 			if (flagy) {
-				if (flagy & MAN_SCALE_Y) glLoadName(MAN_SCALE_Y);
-				else if (flagy & MAN_TRANS_Y) glLoadName(MAN_TRANS_Y);
-				manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
+				if (is_picksel) {
+					if      (flagy & MAN_SCALE_Y) glLoadName(MAN_SCALE_Y);
+					else if (flagy & MAN_TRANS_Y) glLoadName(MAN_TRANS_Y);
+				}
+				else {
+					manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
+				}
 				glBegin(GL_LINES);
 				glVertex3f(0.0f, 0.2f, 0.0f);
 				glVertex3f(0.0f, 1.0f, 0.0f);
@@ -920,9 +929,13 @@ static void draw_manipulator_axes_single(View3D *v3d, RegionView3D *rv3d, int co
 			break;
 		case 2:
 			if (flagz) {
-				if (flagz & MAN_SCALE_Z) glLoadName(MAN_SCALE_Z);
-				else if (flagz & MAN_TRANS_Z) glLoadName(MAN_TRANS_Z);
-				manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
+				if (is_picksel) {
+					if      (flagz & MAN_SCALE_Z) glLoadName(MAN_SCALE_Z);
+					else if (flagz & MAN_TRANS_Z) glLoadName(MAN_TRANS_Z);
+				}
+				else {
+					manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
+				}
 				glBegin(GL_LINES);
 				glVertex3f(0.0f, 0.0f, 0.2f);
 				glVertex3f(0.0f, 0.0f, 1.0f);
@@ -933,11 +946,11 @@ static void draw_manipulator_axes_single(View3D *v3d, RegionView3D *rv3d, int co
 }
 static void draw_manipulator_axes(View3D *v3d, RegionView3D *rv3d, int colcode,
                                   int flagx, int flagy, int flagz,
-                                  const int axis_order[3])
+                                  const int axis_order[3], const bool is_picksel)
 {
 	int i;
 	for (i = 0; i < 3; i++) {
-		draw_manipulator_axes_single(v3d, rv3d, colcode, flagx, flagy, flagz, axis_order[i]);
+		draw_manipulator_axes_single(v3d, rv3d, colcode, flagx, flagy, flagz, axis_order[i], is_picksel);
 	}
 }
 
@@ -1005,19 +1018,20 @@ static void draw_manipulator_rotate(
 	/* Screen aligned trackball rot circle */
 	if (drawflags & MAN_ROT_T) {
 		if (is_picksel) glLoadName(MAN_ROT_T);
-
-		if (v3d->twflag & V3D_SET_MANIPULATOR) {
-			UI_ThemeColor(TH_TRANSFORM_SET);
-		}
 		else {
-			UI_ThemeColor(TH_TRANSFORM);
+			if (v3d->twflag & V3D_SET_MANIPULATOR) {
+				UI_ThemeColor(TH_TRANSFORM_SET);
+			}
+			else {
+				UI_ThemeColor(TH_TRANSFORM);
+			}
 		}
 		drawcircball(GL_LINE_LOOP, unitmat[3], 0.2f * size, unitmat);
 	}
 
 	/* Screen aligned view rot circle */
 	if (drawflags & MAN_ROT_V) {
-		if (G.f & G_PICKSEL) glLoadName(MAN_ROT_V);
+		if (is_picksel) glLoadName(MAN_ROT_V);
 		if (v3d->twflag & V3D_SET_MANIPULATOR) {
 			UI_ThemeColor(TH_TRANSFORM_SET);
 		}
@@ -1102,7 +1116,7 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_Z) {
 			preOrthoFront(ortho, matt, 2);
 			if (is_picksel) glLoadName(MAN_ROT_Z);
-			manipulator_setcolor(v3d, 'Z', colcode, 255);
+			else manipulator_setcolor(v3d, 'Z', colcode, 255);
 			drawcircball(GL_LINE_LOOP, unitmat[3], 1.0, unitmat);
 			postOrtho(ortho);
 		}
@@ -1110,8 +1124,8 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_X) {
 			preOrthoFront(ortho, matt, 0);
 			if (is_picksel) glLoadName(MAN_ROT_X);
+			else manipulator_setcolor(v3d, 'X', colcode, 255);
 			glRotatef(90.0, 0.0, 1.0, 0.0);
-			manipulator_setcolor(v3d, 'X', colcode, 255);
 			drawcircball(GL_LINE_LOOP, unitmat[3], 1.0, unitmat);
 			glRotatef(-90.0, 0.0, 1.0, 0.0);
 			postOrtho(ortho);
@@ -1120,8 +1134,8 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_Y) {
 			preOrthoFront(ortho, matt, 1);
 			if (is_picksel) glLoadName(MAN_ROT_Y);
+			else manipulator_setcolor(v3d, 'Y', colcode, 255);
 			glRotatef(-90.0, 1.0, 0.0, 0.0);
-			manipulator_setcolor(v3d, 'Y', colcode, 255);
 			drawcircball(GL_LINE_LOOP, unitmat[3], 1.0, unitmat);
 			glRotatef(90.0, 1.0, 0.0, 0.0);
 			postOrtho(ortho);
@@ -1137,7 +1151,7 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_Z) {
 			preOrthoFront(ortho, rv3d->twmat, 2);
 			if (is_picksel) glLoadName(MAN_ROT_Z);
-			manipulator_setcolor(v3d, 'Z', colcode, 255);
+			else manipulator_setcolor(v3d, 'Z', colcode, 255);
 			partial_doughnut(cusize / 4.0f, 1.0f, 0, 48, 8, 48);
 			postOrtho(ortho);
 		}
@@ -1145,8 +1159,8 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_X) {
 			preOrthoFront(ortho, rv3d->twmat, 0);
 			if (is_picksel) glLoadName(MAN_ROT_X);
+			else manipulator_setcolor(v3d, 'X', colcode, 255);
 			glRotatef(90.0, 0.0, 1.0, 0.0);
-			manipulator_setcolor(v3d, 'X', colcode, 255);
 			partial_doughnut(cusize / 4.0f, 1.0f, 0, 48, 8, 48);
 			glRotatef(-90.0, 0.0, 1.0, 0.0);
 			postOrtho(ortho);
@@ -1155,8 +1169,8 @@ static void draw_manipulator_rotate(
 		if (drawflags & MAN_ROT_Y) {
 			preOrthoFront(ortho, rv3d->twmat, 1);
 			if (is_picksel) glLoadName(MAN_ROT_Y);
+			else manipulator_setcolor(v3d, 'Y', colcode, 255);
 			glRotatef(-90.0, 1.0, 0.0, 0.0);
-			manipulator_setcolor(v3d, 'Y', colcode, 255);
 			partial_doughnut(cusize / 4.0f, 1.0f, 0, 48, 8, 48);
 			glRotatef(90.0, 1.0, 0.0, 0.0);
 			postOrtho(ortho);
@@ -1172,7 +1186,7 @@ static void draw_manipulator_rotate(
 			preOrthoFront(ortho, rv3d->twmat, 2);
 			glPushMatrix();
 			if (is_picksel) glLoadName(MAN_ROT_Z);
-			manipulator_setcolor(v3d, 'Z', colcode, 255);
+			else manipulator_setcolor(v3d, 'Z', colcode, 255);
 
 			partial_doughnut(0.7f * cusize, 1.0f, 31, 33, 8, 64);
 
@@ -1185,7 +1199,7 @@ static void draw_manipulator_rotate(
 			preOrthoFront(ortho, rv3d->twmat, 1);
 			glPushMatrix();
 			if (is_picksel) glLoadName(MAN_ROT_Y);
-			manipulator_setcolor(v3d, 'Y', colcode, 255);
+			else manipulator_setcolor(v3d, 'Y', colcode, 255);
 
 			glRotatef(90.0, 1.0, 0.0, 0.0);
 			glRotatef(90.0, 0.0, 0.0, 1.0);
@@ -1200,7 +1214,7 @@ static void draw_manipulator_rotate(
 			preOrthoFront(ortho, rv3d->twmat, 0);
 			glPushMatrix();
 			if (is_picksel) glLoadName(MAN_ROT_X);
-			manipulator_setcolor(v3d, 'X', colcode, 255);
+			else manipulator_setcolor(v3d, 'X', colcode, 255);
 
 			glRotatef(-90.0, 0.0, 1.0, 0.0);
 			glRotatef(90.0, 0.0, 0.0, 1.0);
@@ -1303,8 +1317,8 @@ static void draw_manipulator_scale(
 
 		/* center circle, do not add to selection when shift is pressed (planar constraint)  */
 		if (is_picksel && shift == 0) glLoadName(MAN_SCALE_C);
+		else manipulator_setcolor(v3d, 'C', colcode, 255);
 
-		manipulator_setcolor(v3d, 'C', colcode, 255);
 		glPushMatrix();
 		size = screen_aligned(rv3d, rv3d->twmat);
 		unit_m4(unitmat);
@@ -1335,7 +1349,7 @@ static void draw_manipulator_scale(
 	/* in combo mode, this is always drawn as first type */
 	draw_manipulator_axes(v3d, rv3d, colcode,
 	                      drawflags & MAN_SCALE_X, drawflags & MAN_SCALE_Y, drawflags & MAN_SCALE_Z,
-	                      axis_order);
+	                      axis_order, is_picksel);
 
 
 	for (i = 0; i < 3; i++) {
@@ -1344,7 +1358,7 @@ static void draw_manipulator_scale(
 				if (drawflags & MAN_SCALE_X) {
 					glTranslatef(dz, 0.0, 0.0);
 					if (is_picksel) glLoadName(MAN_SCALE_X);
-					manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
+					else manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
 					drawsolidcube(cusize);
 					glTranslatef(-dz, 0.0, 0.0);
 				}
@@ -1353,7 +1367,7 @@ static void draw_manipulator_scale(
 				if (drawflags & MAN_SCALE_Y) {
 					glTranslatef(0.0, dz, 0.0);
 					if (is_picksel) glLoadName(MAN_SCALE_Y);
-					manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
+					else manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
 					drawsolidcube(cusize);
 					glTranslatef(0.0, -dz, 0.0);
 				}
@@ -1362,7 +1376,7 @@ static void draw_manipulator_scale(
 				if (drawflags & MAN_SCALE_Z) {
 					glTranslatef(0.0, 0.0, dz);
 					if (is_picksel) glLoadName(MAN_SCALE_Z);
-					manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
+					else manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
 					drawsolidcube(cusize);
 					glTranslatef(0.0, 0.0, -dz);
 				}
@@ -1439,8 +1453,8 @@ static void draw_manipulator_translate(
 
 	/* center circle, do not add to selection when shift is pressed (planar constraint) */
 	if (is_picksel && shift == 0) glLoadName(MAN_TRANS_C);
+	else manipulator_setcolor(v3d, 'C', colcode, 255);
 
-	manipulator_setcolor(v3d, 'C', colcode, 255);
 	glPushMatrix();
 	size = screen_aligned(rv3d, rv3d->twmat);
 	unit_m4(unitmat);
@@ -1457,7 +1471,7 @@ static void draw_manipulator_translate(
 	if ((combo & V3D_MANIP_SCALE) == 0 || colcode == MAN_GHOST) {
 		draw_manipulator_axes(v3d, rv3d, colcode,
 		                      drawflags & MAN_TRANS_X, drawflags & MAN_TRANS_Y, drawflags & MAN_TRANS_Z,
-		                      axis_order);
+		                      axis_order, is_picksel);
 	}
 
 
@@ -1475,7 +1489,7 @@ static void draw_manipulator_translate(
 				if (drawflags & MAN_TRANS_Z) {
 					glTranslatef(0.0, 0.0, dz);
 					if (is_picksel) glLoadName(MAN_TRANS_Z);
-					manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
+					else manipulator_setcolor(v3d, 'Z', colcode, axisBlendAngle(rv3d->twangle[2]));
 					draw_cone(qobj, cylen, cywid);
 					glTranslatef(0.0, 0.0, -dz);
 				}
@@ -1484,8 +1498,8 @@ static void draw_manipulator_translate(
 				if (drawflags & MAN_TRANS_X) {
 					glTranslatef(dz, 0.0, 0.0);
 					if (is_picksel) glLoadName(MAN_TRANS_X);
+					else manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
 					glRotatef(90.0, 0.0, 1.0, 0.0);
-					manipulator_setcolor(v3d, 'X', colcode, axisBlendAngle(rv3d->twangle[0]));
 					draw_cone(qobj, cylen, cywid);
 					glRotatef(-90.0, 0.0, 1.0, 0.0);
 					glTranslatef(-dz, 0.0, 0.0);
@@ -1495,8 +1509,8 @@ static void draw_manipulator_translate(
 				if (drawflags & MAN_TRANS_Y) {
 					glTranslatef(0.0, dz, 0.0);
 					if (is_picksel) glLoadName(MAN_TRANS_Y);
+					else manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
 					glRotatef(-90.0, 1.0, 0.0, 0.0);
-					manipulator_setcolor(v3d, 'Y', colcode, axisBlendAngle(rv3d->twangle[1]));
 					draw_cone(qobj, cylen, cywid);
 					glRotatef(90.0, 1.0, 0.0, 0.0);
 					glTranslatef(0.0, -dz, 0.0);
@@ -1540,7 +1554,7 @@ static void draw_manipulator_rotate_cyl(
 	if (drawflags & MAN_ROT_V) {
 		float unitmat[4][4] = MAT4_UNITY;
 
-		if (G.f & G_PICKSEL) glLoadName(MAN_ROT_V);
+		if (is_picksel) glLoadName(MAN_ROT_V);
 		if (v3d->twflag & V3D_SET_MANIPULATOR) {
 			UI_ThemeColor(TH_TRANSFORM_SET);
 		}
@@ -1586,7 +1600,7 @@ static void draw_manipulator_rotate_cyl(
 		if ((combo & V3D_MANIP_SCALE) == 0) {
 			draw_manipulator_axes(v3d, rv3d, colcode,
 			                      drawflags & MAN_ROT_X, drawflags & MAN_ROT_Y, drawflags & MAN_ROT_Z,
-			                      axis_order);
+			                      axis_order, is_picksel);
 		}
 
 		/* only has to be set when not in picking */

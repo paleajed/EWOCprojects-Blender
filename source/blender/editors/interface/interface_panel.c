@@ -61,6 +61,7 @@
 
 #include "ED_screen.h"
 
+#include "UI_view2d.h"
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
 #include "UI_resources.h"
@@ -1638,6 +1639,10 @@ int ui_handler_panel_region(bContext *C, const wmEvent *event, ARegion *ar)
 				if (pc_dyn) {
 					UI_panel_category_active_set(ar, pc_dyn->idname);
 					ED_region_tag_redraw(ar);
+
+					/* reset scroll to the top [#38348] */
+					UI_view2d_offset(&ar->v2d, -1.0f, 1.0f);
+
 					retval = WM_UI_HANDLER_BREAK;
 				}
 			}
@@ -1645,13 +1650,15 @@ int ui_handler_panel_region(bContext *C, const wmEvent *event, ARegion *ar)
 				/* mouse wheel cycle tabs */
 
 				/* first check if the mouse is in the tab region */
-				if (event->ctrl || (event->x < ((PanelCategoryDyn *)ar->panels_category.first)->rect.xmax)) {
+				if (event->ctrl || (event->mval[0] < ((PanelCategoryDyn *)ar->panels_category.first)->rect.xmax)) {
 					const char *category = UI_panel_category_active_get(ar, false);
 					if (LIKELY(category)) {
 						PanelCategoryDyn *pc_dyn = UI_panel_category_find(ar, category);
 						if (LIKELY(pc_dyn)) {
 							pc_dyn = (event->type == WHEELDOWNMOUSE) ? pc_dyn->next : pc_dyn->prev;
 							if (pc_dyn) {
+								/* intentionally don't reset scroll in this case,
+								 * this allows for quick browsing between tabs */
 								UI_panel_category_active_set(ar, pc_dyn->idname);
 								ED_region_tag_redraw(ar);
 							}

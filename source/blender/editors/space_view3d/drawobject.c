@@ -3724,14 +3724,14 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 						glColor4ubv(prop_col);
 						draw_mesh_object_outline(v3d, ob, dm, 1);
 					}
-					for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
-						if (biter->object == ob) {
-							if (ob->flag & SELECT)
-								UI_ThemeColor(TH_PRESEL_SELECT);
-							else
-								UI_ThemeColor(TH_PRESEL_NOSELECT);
-							draw_mesh_object_outline(v3d, ob, dm, 1);
-						}
+				}
+				for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+					if (biter->object == ob) {
+						if (ob->flag & SELECT)
+							UI_ThemeColor(TH_PRESEL_SELECT);
+						else
+							UI_ThemeColor(TH_PRESEL_NOSELECT);
+						draw_mesh_object_outline(v3d, ob, dm, 1);
 					}
 				}
 		
@@ -3774,15 +3774,15 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 					glColor4ubv(prop_col);
 					draw_mesh_object_outline(v3d, ob, dm, 1);
 				}
-				for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
-					if (biter->object == ob) {
-						if (ob->flag & SELECT)
-							UI_ThemeColor(TH_PRESEL_SELECT);
-						else
-							UI_ThemeColor(TH_PRESEL_NOSELECT);
-						draw_mesh_object_outline(v3d, ob, dm, 1);
-						break;
-					}
+			}
+			for (biter = (&v3d->preselobs)->first; biter; biter = biter->next) {
+				if (biter->object == ob) {
+					if (ob->flag & SELECT)
+						UI_ThemeColor(TH_PRESEL_SELECT);
+					else
+						UI_ThemeColor(TH_PRESEL_NOSELECT);
+					draw_mesh_object_outline(v3d, ob, dm, 1);
+					break;
 				}
 			}
 	

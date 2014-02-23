@@ -230,7 +230,7 @@ static int render_scene_needs_vector(Render *re)
 {
 	SceneRenderLayer *srl;
 	
-	for (srl = re->scene->r.layers.first; srl; srl = srl->next)
+	for (srl = re->r.layers.first; srl; srl = srl->next)
 		if (!(srl->layflag & SCE_LAY_DISABLE))
 			if (srl->passflag & SCE_PASS_VECTOR)
 				return 1;
@@ -412,6 +412,8 @@ void RE_FreeRender(Render *re)
 		RE_engine_free(re->engine);
 
 	BLI_rw_mutex_end(&re->resultmutex);
+
+	BLI_freelistN(&re->r.layers);
 	
 	/* main dbase can already be invalid now, some database-free code checks it */
 	re->main = NULL;
@@ -503,11 +505,16 @@ static int check_mode_full_sample(RenderData *rd)
 void RE_InitState(Render *re, Render *source, RenderData *rd, SceneRenderLayer *srl, int winx, int winy, rcti *disprect)
 {
 	bool had_freestyle = (re->r.mode & R_EDGE_FRS) != 0;
+	int prev_actlay = re->r.actlay;
 
 	re->ok = TRUE;   /* maybe flag */
 	
 	re->i.starttime = PIL_check_seconds_timer();
-	re->r = *rd;     /* hardcopy */
+
+	/* copy render data and render layers for thread safety */
+	BLI_freelistN(&re->r.layers);
+	re->r = *rd;
+	BLI_duplicatelist(&re->r.layers, &rd->layers);
 
 	if (source) {
 		/* reuse border flags from source renderer */
@@ -602,7 +609,9 @@ void RE_InitState(Render *re, Render *source, RenderData *rd, SceneRenderLayer *
 			re->result = NULL;
 		}
 		else if (re->result) {
-			if (re->result->rectx == re->rectx && re->result->recty == re->recty) {
+			if (re->result->rectx == re->rectx && re->result->recty == re->recty &&
+			    prev_actlay == re->r.actlay)
+			{
 				/* keep render result, this avoids flickering black tiles
 				 * when the preview changes */
 			}
