@@ -575,7 +575,6 @@ static int image_view_zoom_modal(bContext *C, wmOperator *op, const wmEvent *eve
 
 	if (event_code == VIEW_APPLY) {
 		zfac = image_zoom_apply(vpd, op, event->x, event->y, U.viewzoom, (U.uiflag & USER_ZOOM_INVERT) != 0);
-		printf("fac %f\n");
 		set_circle_select_zfac(C, zfac);
 	}
 	else if (event_code == VIEW_CONFIRM) {

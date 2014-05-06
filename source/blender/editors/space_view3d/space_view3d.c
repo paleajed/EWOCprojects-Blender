@@ -900,7 +900,6 @@ static void view3d_main_area_listener(bScreen *sc, ScrArea *sa, ARegion *ar, wmN
 					RegionView3D *rv3d = ar->regiondata;
 					rv3d->rflag |= RV3D_GPULIGHT_UPDATE;
 				}
-				ED_region_tag_redraw(ar);
 				if (wmn->action == NA_TRANSFORMED) {
 					if (sc->scene->obedit) {
 						if (sc->scene->obedit->type == OB_MESH) {
@@ -910,13 +909,9 @@ static void view3d_main_area_listener(bScreen *sc, ScrArea *sa, ARegion *ar, wmN
 							BLI_ghash_clear(em->presel_faces, NULL, NULL);
 						}
 					}
-				if (sc->scene->toolsettings->proportional == PROP_EDIT_PROJECTED) {
-						EDBM_create_prop_presel(wmn->wm, sc, sa, false);
-						lattice_create_prop_presel(wmn->wm, sc, sa, false);
-						curve_create_prop_presel(wmn->wm, sc, sa, false);
-						objects_create_prop_presel(wmn->wm, sc, sa, false);
-					}
+					break;
 				}
+				ED_region_tag_redraw(ar);
 			}
 			break;
 		case NC_ID:
