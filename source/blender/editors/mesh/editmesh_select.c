@@ -1007,8 +1007,8 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 
 /* ****************  LOOP SELECTS *************** */
 
-static void walker_select(BMEditMesh *em, int walkercode, void *start, 
-                          const bool select, const bool presel, const bool vert)
+static void walker_select_count(BMEditMesh *em, int walkercode, void *start, const bool select, const bool select_mix,
+                                int *r_totsel, int *r_totunsel)
 {
 	BMesh *bm = em->bm;
 	BMElem *ele;
