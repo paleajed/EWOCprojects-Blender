@@ -43,6 +43,7 @@ set(INC_SYS
 set(SRC
 	object_add.c
 	object_bake.c
+	object_bake_api.c
 	object_constraint.c
 	object_edit.c
 	object_group.c
@@ -51,6 +52,7 @@ set(SRC
 	object_lod.c
 	object_modifier.c
 	object_ops.c
+	object_random.c
 	object_relations.c
 	object_select.c
 	object_shapekey.c

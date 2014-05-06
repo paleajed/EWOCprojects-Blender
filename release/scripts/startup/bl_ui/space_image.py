@@ -296,7 +296,7 @@ class IMAGE_MT_uvs(Menu):
         layout.prop(uv, "use_live_unwrap")
         layout.operator("uv.unwrap")
         layout.operator("uv.pin", text="Unpin").clear = True
-        layout.operator("uv.pin")
+        layout.operator("uv.pin").clear = False
 
         layout.separator()
 
@@ -458,7 +458,6 @@ class MASK_MT_editor_menus(Menu):
         sima = context.space_data
         ima = sima.image
 
-        show_render = sima.show_render
         show_uvedit = sima.show_uvedit
         show_maskedit = sima.show_maskedit
 
@@ -763,7 +762,6 @@ class IMAGE_PT_tools_brush_texture(BrushButtonsPanel, Panel):
 
         toolsettings = context.tool_settings.image_paint
         brush = toolsettings.brush
-        tex_slot = brush.texture_slot
 
         col = layout.column()
         col.template_ID_preview(brush, "texture", new="texture.new", rows=3, cols=8)
@@ -779,7 +777,6 @@ class IMAGE_PT_tools_mask_texture(BrushButtonsPanel, Panel):
         layout = self.layout
 
         brush = context.tool_settings.image_paint.brush
-        tex_slot_alpha = brush.mask_texture_slot
 
         col = layout.column()
 
@@ -902,19 +899,19 @@ class IMAGE_PT_tools_brush_appearance(BrushButtonsPanel, Panel):
             layout.label(text="Brush Unset")
             return
 
-        col = layout.column()
-        col.prop(toolsettings, "show_brush")
-
-        col = col.column()
-        col.prop(brush, "cursor_color_add", text="")
-        col.active = toolsettings.show_brush
-
-        layout.separator()
-
         col = layout.column(align=True)
+
+        col.prop(toolsettings, "show_brush")
+        sub = col.column()
+        sub.active = toolsettings.show_brush
+        sub.prop(brush, "cursor_color_add", text="")
+
+        col.separator()
+
         col.prop(brush, "use_custom_icon")
-        if brush.use_custom_icon:
-            col.prop(brush, "icon_filepath", text="")
+        sub = col.column()
+        sub.active = brush.use_custom_icon
+        sub.prop(brush, "icon_filepath", text="")
 
 
 class IMAGE_UV_sculpt_curve(Panel):

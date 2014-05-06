@@ -48,6 +48,7 @@ struct Object;
 
 struct bDopeSheet;
 
+struct bAction;
 struct bActionGroup;
 struct FCurve;
 struct FModifier;
@@ -376,7 +377,8 @@ typedef enum eAnimChannel_Settings {
 	ACHANNEL_SETTING_MUTE     = 2,
 	ACHANNEL_SETTING_EXPAND   = 3,
 	ACHANNEL_SETTING_VISIBLE  = 4,  /* only for Graph Editor */
-	ACHANNEL_SETTING_SOLO     = 5   /* only for NLA Tracks */
+	ACHANNEL_SETTING_SOLO     = 5,  /* only for NLA Tracks */
+	ACHANNEL_SETTING_PINNED   = 6   /* only for NLA Actions */
 } eAnimChannel_Settings;
 
 
@@ -405,14 +407,14 @@ typedef struct bAnimChannelType {
 	
 	/* settings */
 	/* check if the given setting is valid in the current context */
-	bool (*has_setting)(bAnimContext *ac, bAnimListElem *ale, int setting);
+	bool (*has_setting)(bAnimContext *ac, bAnimListElem *ale, eAnimChannel_Settings setting);
 	/* get the flag used for this setting */
-	int (*setting_flag)(bAnimContext *ac, int setting, bool *neg);
+	int (*setting_flag)(bAnimContext *ac, eAnimChannel_Settings setting, bool *neg);
 	/* get the pointer to int/short where data is stored,
 	 * with type being  sizeof(ptr_data) which should be fine for runtime use...
 	 *	- assume that setting has been checked to be valid for current context
 	 */
-	void *(*setting_ptr)(bAnimListElem *ale, int setting, short *type);
+	void *(*setting_ptr)(bAnimListElem *ale, eAnimChannel_Settings setting, short *type);
 } bAnimChannelType;
 
 /* ------------------------ Drawing API -------------------------- */
@@ -454,7 +456,7 @@ void ANIM_channel_setting_set(bAnimContext *ac, bAnimListElem *ale, int setting,
  *	- setting: type of setting to set
  *	- on: whether the visibility setting has been enabled or disabled 
  */
-void ANIM_flush_setting_anim_channels(bAnimContext *ac, ListBase *anim_data, bAnimListElem *ale_setting, int setting, short on);
+void ANIM_flush_setting_anim_channels(bAnimContext *ac, ListBase *anim_data, bAnimListElem *ale_setting, int setting, short mode);
 
 
 /* Deselect all animation channels */
@@ -511,12 +513,12 @@ void free_fmodifiers_copybuf(void);
  * assuming that the buffer has been cleared already with free_fmodifiers_copybuf()
  *	- active: only copy the active modifier
  */
-short ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, short active);
+bool ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, bool active);
 
 /* 'Paste' the F-Modifier(s) from the buffer to the specified list 
  *	- replace: free all the existing modifiers to leave only the pasted ones 
  */
-short ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, short replace);
+bool ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, bool replace);
 
 /* ************************************************* */
 /* ASSORTED TOOLS */
@@ -530,6 +532,14 @@ int getname_anim_fcurve(char *name, struct ID *id, struct FCurve *fcu);
 /* Automatically determine a color for the nth F-Curve */
 void getcolor_fcurve_rainbow(int cur, int tot, float out[3]);
 
+/* ----------------- NLA Drawing ----------------------- */
+/* NOTE: Technically, this is not in the animation module (it's in space_nla)
+ * but these are sometimes needed by various animation apis.
+ */
+
+/* Get color to use for NLA Action channel's background */
+void nla_action_get_color(struct AnimData *adt, struct bAction *act, float color[4]);
+
 /* ----------------- NLA-Mapping ----------------------- */
 /* anim_draw.c */
 
@@ -537,7 +547,7 @@ void getcolor_fcurve_rainbow(int cur, int tot, float out[3]);
 struct AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale);
 
 /* Apply/Unapply NLA mapping to all keyframes in the nominated F-Curve */
-void ANIM_nla_mapping_apply_fcurve(struct AnimData *adt, struct FCurve *fcu, short restore, short only_keys);
+void ANIM_nla_mapping_apply_fcurve(struct AnimData *adt, struct FCurve *fcu, bool restore, bool only_keys);
 
 /* ..... */
 

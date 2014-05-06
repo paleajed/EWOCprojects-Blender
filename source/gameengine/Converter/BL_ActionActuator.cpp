@@ -93,9 +93,6 @@ BL_ActionActuator::BL_ActionActuator(SCA_IObject *gameobj,
 	m_priority(priority),
 	m_layer(layer),
 	m_ipo_flags(ipo_flags),
-	m_pose(NULL),
-	m_blendpose(NULL),
-	m_userpose(NULL),
 	m_action(action),
 	m_propname(propname),
 	m_framepropname(framepropname)
@@ -106,20 +103,12 @@ BL_ActionActuator::BL_ActionActuator(SCA_IObject *gameobj,
 
 BL_ActionActuator::~BL_ActionActuator()
 {
-	if (m_pose)
-		game_free_pose(m_pose);
-	if (m_userpose)
-		game_free_pose(m_userpose);
-	if (m_blendpose)
-		game_free_pose(m_blendpose);
 }
 
 void BL_ActionActuator::ProcessReplica()
 {
 	SCA_IActuator::ProcessReplica();
-	
-	m_pose = NULL;
-	m_blendpose = NULL;
+
 	m_localtime=m_startframe;
 	m_lastUpdate=-1;
 	
@@ -270,7 +259,8 @@ bool BL_ActionActuator::Update(double curtime, bool frame)
 
 		if (m_playtype == ACT_ACTION_PINGPONG)
 			m_flag ^= ACT_FLAG_REVERSE;
-		return false;
+		else
+			return false;
 	}
 	
 	// If a different action is playing, we've been overruled and are no longer active

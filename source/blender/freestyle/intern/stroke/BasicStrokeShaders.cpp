@@ -449,6 +449,17 @@ int ColorNoiseShader::shade(Stroke& stroke) const
 //
 ///////////////////////////////////////////////////////////////////////////////
 
+int BlenderTextureShader::shade(Stroke& stroke) const
+{
+	return stroke.setMTex(_mtex);
+}
+
+int StrokeTextureStepShader::shade(Stroke& stroke) const
+{
+	stroke.setTextureStep(_step);
+	return 0;
+}
+
 int TextureAssignerShader::shade(Stroke& stroke) const
 {
 #if 0
@@ -841,7 +852,7 @@ int BezierCurveShader::shade(Stroke& stroke) const
 		if (it.isEnd()) {
 			// XXX Shocking! :P Shouldn't we break in this case???
 			if (G.debug & G_DEBUG_FREESTYLE) {
-				cout << "fucked up" << endl;
+				cout << "messed up!" << endl;
 			}
 		}
 	}

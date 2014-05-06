@@ -42,7 +42,6 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_mask_types.h"
 
@@ -65,7 +64,6 @@
 #include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
 #include "ED_screen.h"
-#include "ED_transform.h"
 #include "ED_markers.h"
 #include "ED_mask.h"
 
@@ -122,7 +120,7 @@ static int act_new_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 	
 	/* set notifier that keyframes have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_ADDED, NULL);
 	
 	return OPERATOR_FINISHED;
 }
@@ -285,7 +283,7 @@ static bool get_keyframe_extents(bAnimContext *ac, float *min, float *max, const
 				float tmin, tmax;
 
 				/* get range and apply necessary scaling before processing */
-				if (calc_fcurve_range(fcu, &tmin, &tmax, onlySel, TRUE)) {
+				if (calc_fcurve_range(fcu, &tmin, &tmax, onlySel, true)) {
 
 					if (adt) {
 						tmin = BKE_nla_tweakedit_remap(adt, tmin, NLATIME_CONVERT_MAP);
@@ -335,7 +333,7 @@ static int actkeys_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
 		scene = ac.scene;
 	
 	/* set the range directly */
-	get_keyframe_extents(&ac, &min, &max, FALSE);
+	get_keyframe_extents(&ac, &min, &max, false);
 	scene->r.flag |= SCER_PRV_RANGE;
 	scene->r.psfra = iroundf(min);
 	scene->r.pefra = iroundf(max);
@@ -368,7 +366,7 @@ static int actkeys_viewall(bContext *C, const bool only_sel, const bool only_xax
 {
 	bAnimContext ac;
 	View2D *v2d;
-	float extra;
+	float extra, min, max;
 	bool found;
 	
 	/* get editor data */
@@ -377,11 +375,14 @@ static int actkeys_viewall(bContext *C, const bool only_sel, const bool only_xax
 	v2d = &ac.ar->v2d;
 	
 	/* set the horizontal range, with an extra offset so that the extreme keys will be in view */
-	found = get_keyframe_extents(&ac, &v2d->cur.xmin, &v2d->cur.xmax, only_sel);
+	found = get_keyframe_extents(&ac, &min, &max, only_sel);
 
 	if (only_sel && (found == false))
 		return OPERATOR_CANCELLED;
-	
+
+	v2d->cur.xmin = min;
+	v2d->cur.xmax = max;
+
 	extra = 0.1f * BLI_rctf_size_x(&v2d->cur);
 	v2d->cur.xmin -= extra;
 	v2d->cur.xmax += extra;
@@ -677,7 +678,7 @@ static int actkeys_insertkey_exec(bContext *C, wmOperator *op)
 	ANIM_editkeyframes_refresh(&ac);
 	
 	/* set notifier that keyframes have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_ADDED, NULL);
 	
 	return OPERATOR_FINISHED;
 }
@@ -750,7 +751,7 @@ static int actkeys_duplicate_exec(bContext *C, wmOperator *UNUSED(op))
 		ANIM_editkeyframes_refresh(&ac);
 	
 	/* set notifier that keyframes have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_ADDED, NULL);
 	
 	return OPERATOR_FINISHED;
 }
@@ -840,7 +841,7 @@ static int actkeys_delete_exec(bContext *C, wmOperator *UNUSED(op))
 		ANIM_editkeyframes_refresh(&ac);
 	
 	/* set notifier that keyframes have changed */
-	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_REMOVED, NULL);
 	
 	return OPERATOR_FINISHED;
 }

@@ -74,7 +74,7 @@
 /* Getter/Setter -------------------------------------------- */
 
 /* Check if ID can have AnimData */
-short id_type_can_have_animdata(ID *id)
+bool id_type_can_have_animdata(ID *id)
 {
 	/* sanity check */
 	if (id == NULL)
@@ -157,10 +157,10 @@ AnimData *BKE_id_add_animdata(ID *id)
 /* Action Setter --------------------------------------- */
 
 /* Called when user tries to change the active action of an AnimData block (via RNA, Outliner, etc.) */
-short BKE_animdata_set_action(ReportList *reports, ID *id, bAction *act)
+bool BKE_animdata_set_action(ReportList *reports, ID *id, bAction *act)
 {
 	AnimData *adt = BKE_animdata_from_id(id);
-	short ok = 0;
+	bool ok = false;
 	
 	/* animdata validity check */
 	if (adt == NULL) {
@@ -279,7 +279,7 @@ AnimData *BKE_copy_animdata(AnimData *adt, const bool do_action)
 	return dadt;
 }
 
-int BKE_copy_animdata_id(ID *id_to, ID *id_from, const bool do_action)
+bool BKE_copy_animdata_id(ID *id_to, ID *id_from, const bool do_action)
 {
 	AnimData *adt;
 
@@ -567,7 +567,7 @@ static bool check_rna_path_is_valid(ID *owner_id, const char *path)
 /* Check if some given RNA Path needs fixing - free the given path and set a new one as appropriate 
  * NOTE: we assume that oldName and newName have [" "] padding around them
  */
-static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName, char *oldpath, int verify_paths)
+static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName, char *oldpath, bool verify_paths)
 {
 	char *prefixPtr = strstr(oldpath, prefix);
 	char *oldNamePtr = strstr(oldpath, oldName);
@@ -581,7 +581,7 @@ static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *o
 		/* if we haven't aren't able to resolve the path now, try again after fixing it */
 		if (!verify_paths || check_rna_path_is_valid(owner_id, oldpath) == 0) {
 			DynStr *ds = BLI_dynstr_new();
-			char *postfixPtr = oldNamePtr + oldNameLen;
+			const char *postfixPtr = oldNamePtr + oldNameLen;
 			char *newPath = NULL;
 			char oldChar;
 			
@@ -626,14 +626,14 @@ static char *rna_path_rename_fix(ID *owner_id, const char *prefix, const char *o
 
 /* Check RNA-Paths for a list of F-Curves */
 static void fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName, 
-                                    const char *oldKey, const char *newKey, ListBase *curves, int verify_paths)
+                                    const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
 	FCurve *fcu;
 	
 	/* we need to check every curve... */
 	for (fcu = curves->first; fcu; fcu = fcu->next) {
 		if (fcu->rna_path) {
-			char *old_path = fcu->rna_path;
+			const char *old_path = fcu->rna_path;
 			
 			/* firstly, handle the F-Curve's own path */
 			fcu->rna_path = rna_path_rename_fix(owner_id, prefix, oldKey, newKey, fcu->rna_path, verify_paths);
@@ -654,7 +654,7 @@ static void fcurves_path_rename_fix(ID *owner_id, const char *prefix, const char
 
 /* Check RNA-Paths for a list of Drivers */
 static void drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix, const char *oldName, const char *newName,
-                                    const char *oldKey, const char *newKey, ListBase *curves, int verify_paths)
+                                    const char *oldKey, const char *newKey, ListBase *curves, bool verify_paths)
 {
 	FCurve *fcu;
 	
@@ -695,7 +695,7 @@ static void drivers_path_rename_fix(ID *owner_id, ID *ref_id, const char *prefix
 
 /* Fix all RNA-Paths for Actions linked to NLA Strips */
 static void nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const char *oldName, const char *newName, 
-                                      const char *oldKey, const char *newKey, ListBase *strips, int verify_paths)
+                                      const char *oldKey, const char *newKey, ListBase *strips, bool verify_paths)
 {
 	NlaStrip *strip;
 	
@@ -720,7 +720,7 @@ static void nlastrips_path_rename_fix(ID *owner_id, const char *prefix, const ch
  *       i.e. pose.bones["Bone"]
  */
 void BKE_action_fix_paths_rename(ID *owner_id, bAction *act, const char *prefix, const char *oldName,
-                                 const char *newName, int oldSubscript, int newSubscript, int verify_paths)
+                                 const char *newName, int oldSubscript, int newSubscript, bool verify_paths)
 {
 	char *oldN, *newN;
 	
@@ -759,7 +759,7 @@ void BKE_action_fix_paths_rename(ID *owner_id, bAction *act, const char *prefix,
  *       i.e. pose.bones["Bone"]
  */
 void BKE_animdata_fix_paths_rename(ID *owner_id, AnimData *adt, ID *ref_id, const char *prefix, const char *oldName,
-                                   const char *newName, int oldSubscript, int newSubscript, int verify_paths)
+                                   const char *newName, int oldSubscript, int newSubscript, bool verify_paths)
 {
 	NlaTrack *nlt;
 	char *oldN, *newN;
@@ -894,7 +894,7 @@ void BKE_animdata_main_cb(Main *mainptr, ID_AnimData_Edit_Callback func, void *u
 		AnimData *adt = BKE_animdata_from_id(id); \
 		NtId_Type *ntp = (NtId_Type *)id; \
 		if (ntp->nodetree) { \
-			AnimData *adt2 = BKE_animdata_from_id((ID *)ntp); \
+			AnimData *adt2 = BKE_animdata_from_id((ID *)ntp->nodetree); \
 			if (adt2) func(id, adt2, user_data); \
 		} \
 		if (adt) func(id, adt, user_data); \
@@ -1259,7 +1259,7 @@ void BKE_keyingsets_free(ListBase *list)
  *	- path: original path string (as stored in F-Curve data)
  *	- dst: destination string to write data to
  */
-static short animsys_remap_path(AnimMapper *UNUSED(remap), char *path, char **dst)
+static bool animsys_remap_path(AnimMapper *UNUSED(remap), char *path, char **dst)
 {
 	/* is there a valid remapping table to use? */
 #if 0
@@ -1279,7 +1279,7 @@ static short animsys_remap_path(AnimMapper *UNUSED(remap), char *path, char **ds
 #define ANIMSYS_FLOAT_AS_BOOL(value) ((value) > ((1.0f - FLT_EPSILON)))
 
 /* Write the given value to a setting using RNA, and return success */
-static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_index, float value)
+static bool animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_index, float value)
 {
 	PropertyRNA *prop;
 	PointerRNA new_ptr;
@@ -1291,7 +1291,7 @@ static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_in
 		/* set value - only for animatable numerical values */
 		if (RNA_property_animateable(&new_ptr, prop)) {
 			int array_len = RNA_property_array_length(&new_ptr, prop);
-			int written = FALSE;
+			bool written = false;
 			
 			if (array_len && array_index >= array_len) {
 				if (G.debug & G_DEBUG) {
@@ -1308,13 +1308,13 @@ static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_in
 					if (array_len) {
 						if (RNA_property_boolean_get_index(&new_ptr, prop, array_index) != ANIMSYS_FLOAT_AS_BOOL(value)) {
 							RNA_property_boolean_set_index(&new_ptr, prop, array_index, ANIMSYS_FLOAT_AS_BOOL(value));
-							written = TRUE;
+							written = true;
 						}
 					}
 					else {
 						if (RNA_property_boolean_get(&new_ptr, prop) != ANIMSYS_FLOAT_AS_BOOL(value)) {
 							RNA_property_boolean_set(&new_ptr, prop, ANIMSYS_FLOAT_AS_BOOL(value));
-							written = TRUE;
+							written = true;
 						}
 					}
 					break;
@@ -1322,13 +1322,13 @@ static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_in
 					if (array_len) {
 						if (RNA_property_int_get_index(&new_ptr, prop, array_index) != (int)value) {
 							RNA_property_int_set_index(&new_ptr, prop, array_index, (int)value);
-							written = TRUE;
+							written = true;
 						}
 					}
 					else {
 						if (RNA_property_int_get(&new_ptr, prop) != (int)value) {
 							RNA_property_int_set(&new_ptr, prop, (int)value);
-							written = TRUE;
+							written = true;
 						}
 					}
 					break;
@@ -1336,20 +1336,20 @@ static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_in
 					if (array_len) {
 						if (RNA_property_float_get_index(&new_ptr, prop, array_index) != value) {
 							RNA_property_float_set_index(&new_ptr, prop, array_index, value);
-							written = TRUE;
+							written = true;
 						}
 					}
 					else {
 						if (RNA_property_float_get(&new_ptr, prop) != value) {
 							RNA_property_float_set(&new_ptr, prop, value);
-							written = TRUE;
+							written = true;
 						}
 					}
 					break;
 				case PROP_ENUM:
 					if (RNA_property_enum_get(&new_ptr, prop) != (int)value) {
 						RNA_property_enum_set(&new_ptr, prop, (int)value);
-						written = TRUE;
+						written = true;
 					}
 					break;
 				default:
@@ -1409,11 +1409,11 @@ static short animsys_write_rna_setting(PointerRNA *ptr, char *path, int array_in
 }
 
 /* Simple replacement based data-setting of the FCurve using RNA */
-static short animsys_execute_fcurve(PointerRNA *ptr, AnimMapper *remap, FCurve *fcu)
+static bool animsys_execute_fcurve(PointerRNA *ptr, AnimMapper *remap, FCurve *fcu)
 {
 	char *path = NULL;
-	short free_path = 0;
-	short ok = 0;
+	bool free_path = false;
+	bool ok = false;
 	
 	/* get path, remapped as appropriate to work in its new environment */
 	free_path = animsys_remap_path(remap, fcu->rna_path, &path);
@@ -1463,7 +1463,7 @@ static void animsys_evaluate_drivers(PointerRNA *ptr, AnimData *adt, float ctime
 	 */
 	for (fcu = adt->drivers.first; fcu; fcu = fcu->next) {
 		ChannelDriver *driver = fcu->driver;
-		short ok = 0;
+		bool ok = false;
 		
 		/* check if this driver's curve should be skipped */
 		if ((fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED)) == 0) {
@@ -1798,7 +1798,7 @@ static void nlaevalchan_value_init(NlaEvalChannel *nec)
 }
 
 /* verify that an appropriate NlaEvalChannel for this F-Curve exists */
-static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, ListBase *channels, NlaEvalStrip *nes, FCurve *fcu)
+static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, ListBase *channels, NlaEvalStrip *nes, FCurve *fcu, bool *newChan)
 {
 	NlaEvalChannel *nec;
 	NlaStrip *strip = nes->strip;
@@ -1841,19 +1841,29 @@ static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, ListBase *channels, N
 		
 		/* initialise value using default value of property [#35856] */
 		nlaevalchan_value_init(nec);
+		*newChan = true;
 	}
+	else
+		*newChan = false;
 	
 	/* we can now return */
 	return nec;
 }
 
 /* accumulate (i.e. blend) the given value on to the channel it affects */
-static void nlaevalchan_accumulate(NlaEvalChannel *nec, NlaEvalStrip *nes, float value)
+static void nlaevalchan_accumulate(NlaEvalChannel *nec, NlaEvalStrip *nes, float value, bool newChan)
 {
 	NlaStrip *strip = nes->strip;
 	short blendmode = strip->blendmode;
 	float inf = strip->influence;
 	
+	/* for replace blend mode, and if this is the first strip,
+	 * just replace the value regardless of the influence */
+	if (newChan && blendmode == NLASTRIP_MODE_REPLACE) {
+		nec->value = value;
+		return;
+	}
+
 	/* if this is being performed as part of transition evaluation, incorporate
 	 * an additional weighting factor for the influence
 	 */
@@ -1915,7 +1925,7 @@ static void nlaevalchan_buffers_accumulate(ListBase *channels, ListBase *tmp_buf
 		 * otherwise, add the current channel to the buffer for efficiency
 		 */
 		if (necd)
-			nlaevalchan_accumulate(necd, nes, nec->value);
+			nlaevalchan_accumulate(necd, nes, 0, nec->value);
 		else {
 			BLI_remlink(tmp_buffer, nec);
 			BLI_addtail(channels, nec);
@@ -2014,6 +2024,7 @@ static void nlastrip_evaluate_actionclip(PointerRNA *ptr, ListBase *channels, Li
 	for (fcu = strip->act->curves.first; fcu; fcu = fcu->next) {
 		NlaEvalChannel *nec;
 		float value = 0.0f;
+		bool newChan;
 		
 		/* check if this curve should be skipped */
 		if (fcu->flag & (FCURVE_MUTED | FCURVE_DISABLED))
@@ -2035,9 +2046,9 @@ static void nlastrip_evaluate_actionclip(PointerRNA *ptr, ListBase *channels, Li
 		/* get an NLA evaluation channel to work with, and accumulate the evaluated value with the value(s)
 		 * stored in this channel if it has been used already
 		 */
-		nec = nlaevalchan_verify(ptr, channels, nes, fcu);
+		nec = nlaevalchan_verify(ptr, channels, nes, fcu, &newChan);
 		if (nec)
-			nlaevalchan_accumulate(nec, nes, value);
+			nlaevalchan_accumulate(nec, nes, value, newChan);
 	}
 
 	/* free temporary storage */
@@ -2238,6 +2249,9 @@ static void animsys_evaluate_nla(ListBase *echannels, PointerRNA *ptr, AnimData 
 	ListBase estrips = {NULL, NULL};
 	NlaEvalStrip *nes;
 	
+	NlaStrip dummy_strip = {NULL}; /* dummy strip for active action */
+	
+	
 	/* 1. get the stack of strips to evaluate at current time (influence calculated here) */
 	for (nlt = adt->nla_tracks.first; nlt; nlt = nlt->next, track_index++) {
 		/* stop here if tweaking is on and this strip is the tweaking track (it will be the first one that's 'disabled')... */
@@ -2271,7 +2285,6 @@ static void animsys_evaluate_nla(ListBase *echannels, PointerRNA *ptr, AnimData 
 		/* if there are strips, evaluate action as per NLA rules */
 		if ((has_strips) || (adt->actstrip)) {
 			/* make dummy NLA strip, and add that to the stack */
-			NlaStrip dummy_strip = {NULL};
 			ListBase dummy_trackslist;
 			
 			dummy_trackslist.first = dummy_trackslist.last = &dummy_strip;
@@ -2294,6 +2307,9 @@ static void animsys_evaluate_nla(ListBase *echannels, PointerRNA *ptr, AnimData 
 				dummy_strip.blendmode = adt->act_blendmode;
 				dummy_strip.extendmode = adt->act_extendmode;
 				dummy_strip.influence = adt->act_influence;
+				
+				/* NOTE: must set this, or else the default setting overrides, and this setting doesn't work */
+				dummy_strip.flag |= NLASTRIP_FLAG_USR_INFLUENCE;
 			}
 			
 			/* add this to our list of evaluation strips */
@@ -2302,7 +2318,10 @@ static void animsys_evaluate_nla(ListBase *echannels, PointerRNA *ptr, AnimData 
 		else {
 			/* special case - evaluate as if there isn't any NLA data */
 			/* TODO: this is really just a stop-gap measure... */
+			if (G.debug & G_DEBUG) printf("NLA Eval: Stopgap for active action on NLA Stack - no strips case\n");
+			
 			animsys_evaluate_action(ptr, adt->action, adt->remap, ctime);
+			BLI_freelistN(&estrips);
 			return;
 		}
 	}

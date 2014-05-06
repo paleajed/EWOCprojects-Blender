@@ -61,7 +61,7 @@ class USERPREF_HT_header(Header):
             layout.operator("wm.keyconfig_import")
             layout.operator("wm.keyconfig_export")
         elif userpref.active_section == 'ADDONS':
-            layout.operator("wm.addon_install", icon="FILESEL")
+            layout.operator("wm.addon_install", icon='FILESEL')
             layout.operator("wm.addon_refresh", icon='FILE_REFRESH')
             layout.menu("USERPREF_MT_addons_dev_guides")
         elif userpref.active_section == 'THEMES':
@@ -960,8 +960,7 @@ class USERPREF_MT_ndof_settings(Menu):
         is_view3d = context.space_data.type == 'VIEW_3D'
 
         layout.prop(input_prefs, "ndof_sensitivity")
-        if is_view3d:
-            layout.prop(input_prefs, "ndof_orbit_sensitivity")
+        layout.prop(input_prefs, "ndof_orbit_sensitivity")
 
         if is_view3d:
             layout.separator()
@@ -1107,6 +1106,7 @@ class USERPREF_PT_input(Panel):
         sub.label(text="NDOF Device:")
         sub.prop(inputs, "ndof_sensitivity", text="NDOF Sensitivity")
         sub.prop(inputs, "ndof_orbit_sensitivity", text="NDOF Orbit Sensitivity")
+        sub.row().prop(inputs, "ndof_view_navigate_method", expand=True)
         sub.row().prop(inputs, "ndof_view_rotate_method", expand=True)
 
         row.separator()

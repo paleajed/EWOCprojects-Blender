@@ -569,7 +569,7 @@ static void view_zoom_axis_lock_defaults(bContext *C, bool r_do_zoom_xy[2])
 		ARegion *ar = CTX_wm_region(C);
 
 		if (ar && ar->regiontype != RGN_TYPE_PREVIEW)
-			r_do_zoom_xy = false;
+			r_do_zoom_xy[1] = false;
 	}
 }
 
@@ -757,7 +757,7 @@ static int view_zoomin_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 		ARegion *ar = CTX_wm_region(C);
 		
 		/* store initial mouse position (in view space) */
-		UI_view2d_region_to_view(&ar->v2d, 
+		UI_view2d_region_to_view(&ar->v2d,
 		                         event->mval[0], event->mval[1],
 		                         &vzd->mx_2d, &vzd->my_2d);
 	}
@@ -1033,7 +1033,7 @@ static int view_zoomdrag_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
 	if (U.viewzoom == USER_ZOOM_CONT) {
 		/* needs a timer to continue redrawing */
-		vzd->timer = WM_event_add_timer(CTX_wm_manager(C), CTX_wm_window(C), TIMER, 0.01f);
+		vzd->timer = WM_event_add_timer(CTX_wm_manager(C), window, TIMER, 0.01f);
 		vzd->timer_lastdraw = PIL_check_seconds_timer();
 	}
 
@@ -1182,8 +1182,8 @@ static int view_borderzoom_exec(bContext *C, wmOperator *op)
 	const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
 	
 	/* convert coordinates of rect to 'tot' rect coordinates */
-	UI_view2d_region_to_view(v2d, RNA_int_get(op->ptr, "xmin"), RNA_int_get(op->ptr, "ymin"), &rect.xmin, &rect.ymin);
-	UI_view2d_region_to_view(v2d, RNA_int_get(op->ptr, "xmax"), RNA_int_get(op->ptr, "ymax"), &rect.xmax, &rect.ymax);
+	WM_operator_properties_border_to_rctf(op, &rect);
+	UI_view2d_region_to_view_rctf(v2d, &rect, &rect);
 	
 	/* check if zooming in/out view */
 	gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
@@ -1323,6 +1323,7 @@ static void VIEW2D_OT_ndof(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->invoke = view2d_ndof_invoke;
+	ot->poll = view2d_poll;
 
 	/* flags */
 	ot->flag = OPTYPE_LOCK_BYPASS;
@@ -1347,14 +1348,14 @@ struct SmoothView2DStore {
  */
 static float smooth_view_rect_to_fac(const rctf *rect_a, const rctf *rect_b)
 {
-	float size_a[2] = {BLI_rctf_size_x(rect_a),
-	                   BLI_rctf_size_y(rect_a)};
-	float size_b[2] = {BLI_rctf_size_x(rect_b),
-	                   BLI_rctf_size_y(rect_b)};
-	float cent_a[2] = {BLI_rctf_cent_x(rect_a),
-	                   BLI_rctf_cent_y(rect_a)};
-	float cent_b[2] = {BLI_rctf_cent_x(rect_b),
-	                   BLI_rctf_cent_y(rect_b)};
+	const float size_a[2] = {BLI_rctf_size_x(rect_a),
+	                         BLI_rctf_size_y(rect_a)};
+	const float size_b[2] = {BLI_rctf_size_x(rect_b),
+	                         BLI_rctf_size_y(rect_b)};
+	const float cent_a[2] = {BLI_rctf_cent_x(rect_a),
+	                         BLI_rctf_cent_y(rect_a)};
+	const float cent_b[2] = {BLI_rctf_cent_x(rect_b),
+	                         BLI_rctf_cent_y(rect_b)};
 
 	float fac_max = 0.0f;
 	float tfac;
@@ -1991,7 +1992,7 @@ static void VIEW2D_OT_reset(wmOperatorType *ot)
 /* ********************************************************* */
 /* Registration */
 
-void UI_view2d_operatortypes(void)
+void ED_operatortypes_view2d(void)
 {
 	WM_operatortype_append(VIEW2D_OT_pan);
 	
@@ -2015,7 +2016,7 @@ void UI_view2d_operatortypes(void)
 	WM_operatortype_append(VIEW2D_OT_reset);
 }
 
-void UI_view2d_keymap(wmKeyConfig *keyconf)
+void ED_keymap_view2d(wmKeyConfig *keyconf)
 {
 	wmKeyMap *keymap = WM_keymap_find(keyconf, "View2D", 0, 0);
 	wmKeyMapItem *kmi;

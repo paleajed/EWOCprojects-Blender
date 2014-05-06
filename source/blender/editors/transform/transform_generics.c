@@ -45,7 +45,6 @@
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_movieclip_types.h"
@@ -70,10 +69,8 @@
 #include "BKE_armature.h"
 #include "BKE_curve.h"
 #include "BKE_depsgraph.h"
-#include "BKE_displist.h"
 #include "BKE_fcurve.h"
 #include "BKE_lattice.h"
-#include "BKE_mesh.h"
 #include "BKE_nla.h"
 #include "BKE_context.h"
 #include "BKE_sequencer.h"
@@ -404,7 +401,7 @@ static void recalcData_graphedit(TransInfo *t)
 	for (ale = anim_data.first; ale; ale = ale->next) {
 		FCurve *fcu = (FCurve *)ale->key_data;
 		
-		/* ignore unselected fcurves */
+		/* ignore FC-Curves without any selected verts */
 		if (!fcu_test_selected(fcu))
 			continue;
 
@@ -529,23 +526,46 @@ static void recalcData_nla(TransInfo *t)
 				break;
 		}
 		
-		/* handle auto-snapping */
-		switch (snla->autosnap) {
-			case SACTSNAP_FRAME: /* snap to nearest frame/time  */
-				if (snla->flag & SNLA_DRAWTIME) {
-					tdn->h1[0] = (float)(floor(((double)tdn->h1[0] / secf) + 0.5) * secf);
-					tdn->h2[0] = (float)(floor(((double)tdn->h2[0] / secf) + 0.5) * secf);
-				}
-				else {
+		/* handle auto-snapping
+		 * NOTE: only do this when transform is still running, or we can't restore
+		 */
+		if (t->state != TRANS_CANCEL) {
+			switch (snla->autosnap) {
+				case SACTSNAP_FRAME: /* snap to nearest frame */
+				case SACTSNAP_STEP: /* frame step - this is basically the same, since we don't have any remapping going on */
+				{
 					tdn->h1[0] = floorf(tdn->h1[0] + 0.5f);
 					tdn->h2[0] = floorf(tdn->h2[0] + 0.5f);
+					break;
 				}
-				break;
-			
-			case SACTSNAP_MARKER: /* snap to nearest marker */
-				tdn->h1[0] = (float)ED_markers_find_nearest_marker_time(&t->scene->markers, tdn->h1[0]);
-				tdn->h2[0] = (float)ED_markers_find_nearest_marker_time(&t->scene->markers, tdn->h2[0]);
-				break;
+				
+				case SACTSNAP_SECOND: /* snap to nearest second */
+				case SACTSNAP_TSTEP: /* second step - this is basically the same, since we don't have any remapping going on */
+				{
+					/* This case behaves differently from the rest, since lengths of strips
+					 * may not be multiples of a second. If we just naively resize adjust
+					 * the handles, things may not work correctly. Instead, we only snap
+					 * the first handle, and move the other to fit.
+					 *
+					 * FIXME: we do run into problems here when user attempts to negatively
+					 *        scale the strip, as it then just compresses down and refuses
+					 *        to expand out the other end.
+					 */
+					float h1_new = (float)(floor(((double)tdn->h1[0] / secf) + 0.5) * secf);
+					float delta  = h1_new - tdn->h1[0];
+					
+					tdn->h1[0] = h1_new;
+					tdn->h2[0] += delta;
+					break;
+				}
+				
+				case SACTSNAP_MARKER: /* snap to nearest marker */
+				{
+					tdn->h1[0] = (float)ED_markers_find_nearest_marker_time(&t->scene->markers, tdn->h1[0]);
+					tdn->h2[0] = (float)ED_markers_find_nearest_marker_time(&t->scene->markers, tdn->h2[0]);
+					break;
+				}
+			}
 		}
 		
 		/* Use RNA to write the values to ensure that constraints on these are obeyed
@@ -798,25 +818,30 @@ static void recalcData_objects(TransInfo *t)
 			
 			if (!ELEM3(t->mode, TFM_BONE_ROLL, TFM_BONE_ENVELOPE, TFM_BONESIZE)) {
 				/* fix roll */
-				/* Previous method basically tried to get a rotation transform from org ebo Y axis to final ebo Y axis,
-				 * apply this same rotation to org ebo Z axis to get an "up_axis", and compute a new roll value
-				 * so that final ebo's Z axis would be "aligned" with that up_axis.
-				 * There are two issues with that method:
-				 *   - There are many cases where the computed up_axis does not gives a result people would expect.
-				 *   - Applying a same transform in a single step or in several smaller ones would not give the same
-				 *     result! See e.g. T38407.
-				 * Now, instead of trying to be smart with complex axis/angle handling, just store diff roll
-				 * (diff between real init roll and virtual init roll where bone's Z axis would be "aligned" with
-				 * armature's Z axis), and do the reverse to get final roll.
-				 * This method at least gives predictable, consistent results (the bone basically keeps "facing"
-				 * the armature's Z axis).
-				 */
 				for (i = 0; i < t->total; i++, td++) {
 					if (td->extra) {
-						const float z_axis[3] = {0.0f, 0.0f, 1.0f};
-
+						float vec[3], up_axis[3];
+						float qrot[4];
+						float roll;
+						
 						ebo = td->extra;
-						ebo->roll = td->ival + ED_rollBoneToVector(ebo, z_axis, false);
+
+						if (t->state == TRANS_CANCEL) {
+							/* restore roll */
+							ebo->roll = td->ival;
+						}
+						else {
+							copy_v3_v3(up_axis, td->axismtx[2]);
+
+							sub_v3_v3v3(vec, ebo->tail, ebo->head);
+							normalize_v3(vec);
+							rotation_between_vecs_to_quat(qrot, td->axismtx[1], vec);
+							mul_qt_v3(qrot, up_axis);
+
+							/* roll has a tendency to flip in certain orientations - [#34283], [#33974] */
+							roll = ED_rollBoneToVector(ebo, up_axis, false);
+							ebo->roll = angle_compat_rad(roll, td->ival);
+						}
 					}
 				}
 			}
@@ -1527,7 +1552,7 @@ void calculateCenterCursor(TransInfo *t)
 void calculateCenterCursor2D(TransInfo *t)
 {
 	float aspx = 1.0, aspy = 1.0;
-	float *cursor = NULL;
+	const float *cursor = NULL;
 	
 	if (t->spacetype == SPACE_IMAGE) {
 		SpaceImage *sima = (SpaceImage *)t->sa->spacedata.first;
@@ -1733,11 +1758,8 @@ void calculateCenter(TransInfo *t)
 	/* for panning from cameraview */
 	if (t->flag & T_OBJECT) {
 		if (t->spacetype == SPACE_VIEW3D && t->ar && t->ar->regiontype == RGN_TYPE_WINDOW) {
-			View3D *v3d = t->view;
-			Scene *scene = t->scene;
-			RegionView3D *rv3d = t->ar->regiondata;
 			
-			if (v3d->camera == OBACT && rv3d->persp == RV3D_CAMOB) {
+			if (t->flag & T_CAMERA) {
 				float axis[3];
 				/* persinv is nasty, use viewinv instead, always right */
 				copy_v3_v3(axis, t->viewinv[2]);
@@ -1839,7 +1861,7 @@ void calculatePropRatio(TransInfo *t)
 						td->factor = 3.0f * dist * dist - 2.0f * dist * dist * dist;
 						break;
 					case PROP_ROOT:
-						td->factor = (float)sqrt(dist);
+						td->factor = sqrtf(dist);
 						break;
 					case PROP_LIN:
 						td->factor = dist;
@@ -1848,7 +1870,7 @@ void calculatePropRatio(TransInfo *t)
 						td->factor = 1.0f;
 						break;
 					case PROP_SPHERE:
-						td->factor = (float)sqrt(2 * dist - dist * dist);
+						td->factor = sqrtf(2 * dist - dist * dist);
 						break;
 					case PROP_RANDOM:
 						td->factor = BLI_frand() * dist;

@@ -105,7 +105,7 @@ static bool xml_read_float(float *value, pugi::xml_node node, const char *name)
 	pugi::xml_attribute attr = node.attribute(name);
 
 	if(attr) {
-		*value = atof(attr.value());
+		*value = (float)atof(attr.value());
 		return true;
 	}
 
@@ -121,7 +121,7 @@ static bool xml_read_float_array(vector<float>& value, pugi::xml_node node, cons
 		string_split(tokens, attr.value());
 
 		foreach(const string& token, tokens)
-			value.push_back(atof(token.c_str()));
+			value.push_back((float)atof(token.c_str()));
 
 		return true;
 	}
@@ -219,6 +219,35 @@ static bool xml_read_enum(ustring *str, ShaderEnum& enm, pugi::xml_node node, co
 	return false;
 }
 
+static ShaderSocketType xml_read_socket_type(pugi::xml_node node, const char *name)
+{
+	pugi::xml_attribute attr = node.attribute(name);
+
+	if(attr) {
+		string value = attr.value();
+		if (string_iequals(value, "float"))
+			return SHADER_SOCKET_FLOAT;
+		else if (string_iequals(value, "int"))
+			return SHADER_SOCKET_INT;
+		else if (string_iequals(value, "color"))
+			return SHADER_SOCKET_COLOR;
+		else if (string_iequals(value, "vector"))
+			return SHADER_SOCKET_VECTOR;
+		else if (string_iequals(value, "point"))
+			return SHADER_SOCKET_POINT;
+		else if (string_iequals(value, "normal"))
+			return SHADER_SOCKET_NORMAL;
+		else if (string_iequals(value, "closure color"))
+			return SHADER_SOCKET_CLOSURE;
+		else if (string_iequals(value, "string"))
+			return SHADER_SOCKET_STRING;
+		else
+			fprintf(stderr, "Unknown shader socket type \"%s\" for attribute \"%s\".\n", value.c_str(), name);
+	}
+	
+	return SHADER_SOCKET_UNDEFINED;
+}
+
 /* Film */
 
 static void xml_read_film(const XMLReadState& state, pugi::xml_node node)
@@ -251,6 +280,8 @@ static void xml_read_integrator(const XMLReadState& state, pugi::xml_node node)
 		xml_read_int(&integrator->mesh_light_samples, node, "mesh_light_samples");
 		xml_read_int(&integrator->subsurface_samples, node, "subsurface_samples");
 		xml_read_int(&integrator->volume_samples, node, "volume_samples");
+		xml_read_bool(&integrator->sample_all_lights_direct, node, "sample_all_lights_direct");
+		xml_read_bool(&integrator->sample_all_lights_indirect, node, "sample_all_lights_indirect");
 	}
 	
 	/* Bounces */
@@ -291,7 +322,7 @@ static void xml_read_camera(const XMLReadState& state, pugi::xml_node node)
 	xml_read_int(&cam->height, node, "height");
 
 	if(xml_read_float(&cam->fov, node, "fov"))
-		cam->fov *= M_PI/180.0f;
+		cam->fov = DEG2RADF(cam->fov);
 
 	xml_read_float(&cam->nearclip, node, "nearclip");
 	xml_read_float(&cam->farclip, node, "farclip");
@@ -377,24 +408,41 @@ static void xml_read_shader_graph(const XMLReadState& state, Shader *shader, pug
 
 			/* Source */
 			xml_read_string(&osl->filepath, node, "src");
-			osl->filepath = path_join(state.base, osl->filepath);
+			if(path_is_relative(osl->filepath)) {
+				osl->filepath = path_join(state.base, osl->filepath);
+			}
 
-			/* Outputs */
-			string output = "", output_type = "";
-			ShaderSocketType type = SHADER_SOCKET_FLOAT;
-
-			xml_read_string(&output, node, "output");
-			xml_read_string(&output_type, node, "output_type");
-			
-			if(output_type == "float")
-				type = SHADER_SOCKET_FLOAT;
-			else if(output_type == "closure color")
-				type = SHADER_SOCKET_CLOSURE;
-			else if(output_type == "color")
-				type = SHADER_SOCKET_COLOR;
-
-			osl->output_names.push_back(ustring(output));
-			osl->add_output(osl->output_names.back().c_str(), type);
+			/* Generate inputs/outputs from node sockets
+			 *
+			 * Note: ShaderInput/ShaderOutput store shallow string copies only!
+			 * Socket names must be stored in the extra lists instead. */
+			/* read input values */
+			for(pugi::xml_node param = node.first_child(); param; param = param.next_sibling()) {
+				if (string_iequals(param.name(), "input")) {
+					string name;
+					if (!xml_read_string(&name, param, "name"))
+						continue;
+					
+					ShaderSocketType type = xml_read_socket_type(param, "type");
+					if (type == SHADER_SOCKET_UNDEFINED)
+						continue;
+					
+					osl->input_names.push_back(ustring(name));
+					osl->add_input(osl->input_names.back().c_str(), type);
+				}
+				else if (string_iequals(param.name(), "output")) {
+					string name;
+					if (!xml_read_string(&name, param, "name"))
+						continue;
+					
+					ShaderSocketType type = xml_read_socket_type(param, "type");
+					if (type == SHADER_SOCKET_UNDEFINED)
+						continue;
+					
+					osl->output_names.push_back(ustring(name));
+					osl->add_output(osl->output_names.back().c_str(), type);
+				}
+			}
 			
 			snode = osl;
 		}
@@ -601,6 +649,11 @@ static void xml_read_shader_graph(const XMLReadState& state, Shader *shader, pug
 			xml_read_ustring(&attr->attribute, node, "attribute");
 			snode = attr;
 		}
+		else if(string_iequals(node.name(), "uv_map")) {
+			UVMapNode *uvm = new UVMapNode();
+			xml_read_ustring(&uvm->attribute, node, "uv_map");
+			snode = uvm;
+		}
 		else if(string_iequals(node.name(), "camera")) {
 			snode = new CameraNode();
 		}
@@ -719,6 +772,9 @@ static void xml_read_shader_graph(const XMLReadState& state, Shader *shader, pug
 							case SHADER_SOCKET_NORMAL:
 								xml_read_float3(&in->value, node, attr.name());
 								break;
+							case SHADER_SOCKET_STRING:
+								xml_read_ustring( &in->value_string, node, attr.name() );
+								break;
 							default:
 								break;
 						}
@@ -833,7 +889,7 @@ static void xml_read_mesh(const XMLReadState& state, pugi::xml_node node)
 		SubdParams sdparams(mesh, shader, smooth);
 		xml_read_float(&sdparams.dicing_rate, node, "dicing_rate");
 
-		DiagSplit dsplit(sdparams);;
+		DiagSplit dsplit(sdparams);
 		sdmesh.tessellate(&dsplit);
 	}
 	else {
@@ -976,7 +1032,7 @@ static void xml_read_transform(pugi::xml_node node, Transform& tfm)
 	if(node.attribute("rotate")) {
 		float4 rotate = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 		xml_read_float4(&rotate, node, "rotate");
-		tfm = tfm * transform_rotate(rotate.x*M_PI/180.0f, make_float3(rotate.y, rotate.z, rotate.w));
+		tfm = tfm * transform_rotate(DEG2RADF(rotate.x), make_float3(rotate.y, rotate.z, rotate.w));
 	}
 
 	if(node.attribute("scale")) {
