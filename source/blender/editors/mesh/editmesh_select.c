@@ -1008,7 +1008,7 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 /* ****************  LOOP SELECTS *************** */
 
 static void walker_select_count(BMEditMesh *em, int walkercode, void *start, const bool select, const bool select_mix,
-                                int *r_totsel, int *r_totunsel)
+                                int *r_totsel, int *r_totunsel, bool presel)
 {
 	BMesh *bm = em->bm;
 	BMElem *ele;
@@ -1183,13 +1183,13 @@ static void mouse_mesh_loop_edge(BMEditMesh *em, BMEdge *eed, bool select, bool 
 
 		/* if the loops selected toggle the boundaries */
 		walker_select_count(em, BMW_LOOP, eed, select, false,
-		                    &tot[0], &tot[1]);
+		                    &tot[0], &tot[1], presel);
 		if (tot[select] == 0) {
 			edge_boundary = true;
 
 			/* if the boundaries selected, toggle back to the loop */
 			walker_select_count(em, BMW_EDGEBOUNDARY, eed, select, false,
-			                    &tot[0], &tot[1]);
+			                    &tot[0], &tot[1], presel);
 			if (tot[select] == 0) {
 				edge_boundary = false;
 			}

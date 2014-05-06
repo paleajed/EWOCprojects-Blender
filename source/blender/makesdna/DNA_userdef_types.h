@@ -236,8 +236,8 @@ typedef struct ThemeSpace {
 	char view_overlay[4];
 
 	char wire[4], wire_edit[4], select[4];
-	char lamp[4], speaker[4], empty[4], camera[4];
-	char active[4], group[4], group_active[4], transform[4];
+	char lamp[4], speaker[4], empty[4], camera[4], pad0[4];
+	char active[4], group[4], group_active[4], transform[4], transform_set[4];
 	char vertex[4], vertex_select[4], vertex_unreferenced[4];
 	char edge[4], edge_select[4];
 	char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4];
