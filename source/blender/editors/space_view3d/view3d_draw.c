@@ -3432,7 +3432,7 @@ static void view3d_main_area_draw_objects(const bContext *C, Scene *scene, View3
 
 	
 	if (v3d->zbuf) {
-		v3d->zbuf = FALSE;
+		v3d->zbuf = false;
 		glDisable(GL_DEPTH_TEST);
 	}
 

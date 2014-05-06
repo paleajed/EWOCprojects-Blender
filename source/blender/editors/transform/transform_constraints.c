@@ -615,6 +615,7 @@ void setLocalConstraint(TransInfo *t, int mode, const char text[])
 void setUserConstraint(TransInfo *t, short orientation, int mode, const char ftext[])
 {
 	char text[40];
+	float mtx[3][3] = MAT3_UNITY;
 
 	switch (orientation) {
 		case V3D_MANIP_GLOBAL:

@@ -52,6 +52,7 @@
 
 #include "ED_curve.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_space_api.h"
 #include "ED_screen.h"
 

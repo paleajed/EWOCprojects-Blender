@@ -538,9 +538,6 @@ void uvedit_edge_select_disable(BMEditMesh *em, Scene *scene, BMLoop *l,
 
 static void uvedit_edge_presel(BMEditMesh *em, BMLoop *l)
 {
-	BMIter liter;
-	BMLoop *l2;
-
 	BLI_ghash_insert(em->presel_edges, l->e, l);
 }
 
@@ -3091,7 +3088,7 @@ static int uv_circle_select_exec(bContext *C, wmOperator *op)
 	int x, y, radius, width, height;
 	float zoomx, zoomy, offset[2], ellipse[2];
 	int gesture_mode = RNA_int_get(op->ptr, "gesture_mode");
-	const bool select = (gesture_mode == GESTURE_MODAL_SELECT);
+	bool select = (gesture_mode == GESTURE_MODAL_SELECT);
 	bool presel;
 	bool changed = false;
 	const bool use_face_center = (ts->uv_flag & UV_SYNC_SELECTION) ?
@@ -4355,14 +4352,14 @@ void ED_keymap_uvedit(wmKeyConfig *keyconf)
 	WM_keymap_add_item(keymap, "UV_OT_mark_seam", EKEY, KM_PRESS, KM_CTRL, 0);
 	
 	/* preselection */
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, 0, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, KM_SHIFT, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT | KM_SHIFT, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", TRUE);
-	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", TRUE);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, 0, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect", MOUSEMOVE, KM_ANY, KM_SHIFT, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", MOUSEMOVE, KM_ANY, KM_ALT | KM_SHIFT, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, 0, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", LEFTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", true);
+	RNA_boolean_set(WM_keymap_add_item(keymap, "UV_OT_preselect_loop", RIGHTALTKEY, KM_PRESS, KM_SHIFT, 0)->ptr, "presel", true);
 
 	/* pick selection */
 	kmi = WM_keymap_add_item(keymap, "UV_OT_select", SELECTMOUSE, KM_PRESS, 0, 0);
