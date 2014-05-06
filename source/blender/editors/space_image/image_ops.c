@@ -507,7 +507,7 @@ static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 	}
 }
 
-static void image_zoom_apply(ViewZoomData *vpd, wmOperator *op, const int x, const int y, const short viewzoom, const short zoom_invert)
+static float image_zoom_apply(ViewZoomData *vpd, wmOperator *op, const int x, const int y, const short viewzoom, const short zoom_invert)
 {
 	float factor;
 	float zfac;

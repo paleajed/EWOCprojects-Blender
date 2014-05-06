@@ -1008,7 +1008,7 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 /* ****************  LOOP SELECTS *************** */
 
 static void walker_select_count(BMEditMesh *em, int walkercode, void *start, const bool select, const bool select_mix,
-                                int *r_totsel, int *r_totunsel, bool presel)
+                                int *r_totsel, int *r_totunsel, const bool presel, const bool vert)
 {
 	BMesh *bm = em->bm;
 	BMElem *ele;
@@ -1112,14 +1112,14 @@ static int edbm_loop_multiselect_exec(bContext *C, wmOperator *op)
 	if (is_ring) {
 		for (edindex = 0; edindex < totedgesel; edindex += 1) {
 			eed = edarray[edindex];
-			walker_select(em, BMW_EDGERING, eed, true, false, false);
+			walker_select(em, BMW_EDGERING, eed, true);
 		}
 		EDBM_selectmode_flush(em);
 	}
 	else {
 		for (edindex = 0; edindex < totedgesel; edindex += 1) {
 			eed = edarray[edindex];
-			walker_select(em, BMW_LOOP, eed, true, false, false);
+			walker_select(em, BMW_LOOP, eed, true);
 		}
 		EDBM_selectmode_flush(em);
 	}
@@ -1155,25 +1155,25 @@ void MESH_OT_loop_multi_select(wmOperatorType *ot)
 
 /* ***************** loop select (non modal) ************** */
 
-static void mouse_mesh_loop_face(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool presel)
+static void mouse_mesh_loop_face(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool presel, bool vert)
 {
 	if (select_clear) {
 		EDBM_flag_disable_all(em, BM_ELEM_SELECT);
 	}
 
-	walker_select(em, BMW_FACELOOP, eed, select, presel);
+	walker_select(em, BMW_FACELOOP, eed, select);
 }
 
-static void mouse_mesh_loop_edge_ring(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool presel)
+static void mouse_mesh_loop_edge_ring(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool presel, bool vert)
 {
 	if (select_clear) {
 		EDBM_flag_disable_all(em, BM_ELEM_SELECT);
 	}
 
-	walker_select(em, BMW_EDGERING, eed, select, presel);
+	walker_select(em, BMW_EDGERING, eed, select);
 }
 
-static void mouse_mesh_loop_edge(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool select_cycle, bool presel)
+static void mouse_mesh_loop_edge(BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool select_cycle, bool presel, bool vert)
 {
 	bool edge_boundary = false;
 
@@ -1183,13 +1183,13 @@ static void mouse_mesh_loop_edge(BMEditMesh *em, BMEdge *eed, bool select, bool 
 
 		/* if the loops selected toggle the boundaries */
 		walker_select_count(em, BMW_LOOP, eed, select, false,
-		                    &tot[0], &tot[1], presel);
+		                    &tot[0], &tot[1], presel, vert);
 		if (tot[select] == 0) {
 			edge_boundary = true;
 
 			/* if the boundaries selected, toggle back to the loop */
 			walker_select_count(em, BMW_EDGEBOUNDARY, eed, select, false,
-			                    &tot[0], &tot[1], presel);
+			                    &tot[0], &tot[1], presel, vert);
 			if (tot[select] == 0) {
 				edge_boundary = false;
 			}
@@ -1201,10 +1201,10 @@ static void mouse_mesh_loop_edge(BMEditMesh *em, BMEdge *eed, bool select, bool 
 	}
 
 	if (edge_boundary) {
-		walker_select(em, BMW_EDGEBOUNDARY, eed, select, presel);
+		walker_select(em, BMW_EDGEBOUNDARY, eed, select);
 	}
 	else {
-		walker_select(em, BMW_LOOP, eed, select, presel);
+		walker_select(em, BMW_LOOP, eed, select);
 	}
 }
 
@@ -1214,6 +1214,7 @@ static bool mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool de
 	ViewContext vc;
 	BMEditMesh *em;
 	BMEdge *eed;
+	bool vert = false;
 	bool select = true;
 	bool select_clear = false;
 	bool select_cycle = true;
@@ -1253,16 +1254,24 @@ static bool mouse_mesh_loop(bContext *C, const int mval[2], bool extend, bool de
 
 	if (em->selectmode & SCE_SELECT_FACE) {
 		BLI_ghash_clear(em->presel_faces, NULL, NULL);
-		mouse_mesh_loop_face(em, eed, select, select_clear, presel);
+		mouse_mesh_loop_face(em, eed, select, select_clear, presel, vert);
 	}
-	else {
+	else if (em->selectmode & SCE_SELECT_EDGE) {
 		BLI_ghash_clear(em->presel_edges, NULL, NULL);
-		BLI_ghash_clear(em->presel_verts, NULL, NULL);
 		if (ring) {
-			mouse_mesh_loop_edge_ring(em, eed, select, select_clear);
+			mouse_mesh_loop_edge_ring(em, eed, select, select_clear, presel, vert);
 		}
 		else {
-			mouse_mesh_loop_edge(em, eed, select, select_clear, select_cycle);
+			mouse_mesh_loop_edge(em, eed, select, select_clear, select_cycle, presel, vert);
+		}
+	}
+	else if (em->selectmode & SCE_SELECT_VERTEX) {
+		BLI_ghash_clear(em->presel_verts, NULL, NULL);
+		if (ring) {
+			mouse_mesh_loop_edge_ring(em, eed, select, select_clear, presel, vert);
+		}
+		else {
+			mouse_mesh_loop_edge(em, eed, select, select_clear, select_cycle, presel, vert);
 		}
 	}
 
@@ -1349,9 +1358,8 @@ static int edbm_select_loop_invoke(bContext *C, wmOperator *op, const wmEvent *e
 	                    RNA_boolean_get(op->ptr, "extend"),
 	                    RNA_boolean_get(op->ptr, "deselect"),
 	                    RNA_boolean_get(op->ptr, "toggle"),
-	                    RNA_boolean_get(op->ptr, "ring")))
-	                	RNA_boolean_get(op->ptr, "presel"));
-	{
+	                    RNA_boolean_get(op->ptr, "ring"),
+	                	RNA_boolean_get(op->ptr, "presel"))) {
 		return OPERATOR_FINISHED;
 	}
 	else {
