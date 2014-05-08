@@ -1956,6 +1956,7 @@ static void lattice_draw_verts(Lattice *lt, DispList *dl, BPoint *actbp, short s
 	
 	glPointSize(1.0);
 	bglEnd();
+	glDisable(GL_BLEND);
 }
 
 static void drawlattice__point(Lattice *lt, DispList *dl, int u, int v, int w, int actdef_wcol)
@@ -2445,7 +2446,7 @@ static void draw_presel_edges(BMEditMesh *em, DerivedMesh *dm)
 	UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);	
 	
 	glGetFloatv(GL_LINE_WIDTH, &lwidth);
-	glLineWidth(lwidth + 2);
+	glLineWidth(lwidth + 0.5);
 	
 	glDisable(GL_DEPTH_TEST);
 	dm->drawPreselEdges(em, dm, sel_col, nosel_col);
@@ -3974,7 +3975,8 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 			glDepthMask(0);  /* disable write in zbuffer, selected edge wires show better */
 		}
 		
-		dm->drawEdges(dm, (dt == OB_WIRE || totface == 0), (ob->dtx & OB_DRAW_ALL_EDGES) != 0);
+		if ((ob->dt == OB_WIRE) || (v3d->drawtype == OB_WIRE) || (ob->dtx & OB_DRAWWIRE))
+			dm->drawEdges(dm, (dt == OB_WIRE || totface == 0), (ob->dtx & OB_DRAW_ALL_EDGES) != 0);
 
 		if (dt != OB_WIRE && (draw_wire == OBDRAW_WIRE_ON_DEPTH)) {
 			glDepthMask(1);

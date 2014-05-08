@@ -651,9 +651,9 @@ elseif(WIN32)
 		if(MSVC11)
 			install(
 				FILES
-					${LIBDIR}/ffmpeg/lib/avcodec-54.dll
-					${LIBDIR}/ffmpeg/lib/avformat-54.dll
-					${LIBDIR}/ffmpeg/lib/avdevice-54.dll
+					${LIBDIR}/ffmpeg/lib/avcodec-55.dll
+					${LIBDIR}/ffmpeg/lib/avformat-55.dll
+					${LIBDIR}/ffmpeg/lib/avdevice-55.dll
 					${LIBDIR}/ffmpeg/lib/avutil-52.dll
 					${LIBDIR}/ffmpeg/lib/avfilter-3.dll
 					${LIBDIR}/ffmpeg/lib/swresample-0.dll

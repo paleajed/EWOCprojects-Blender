@@ -3239,6 +3239,16 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	
 		
 	if (event->type == MOUSEMOVE) {
+		
+		if (obedit) {
+			if (obedit->type == OB_MESH) {
+				em = BKE_editmesh_from_object(obedit);
+				BLI_ghash_clear(em->presel_verts, NULL, NULL);
+				BLI_ghash_clear(em->presel_edges, NULL, NULL);
+				BLI_ghash_clear(em->presel_faces, NULL, NULL);
+			}
+		}
+		
 		wm_subwindow_origin_get(CTX_wm_window(C), gesture->swinid, &sx, &sy);
 
 		rect = gesture->customdata;
@@ -3342,10 +3352,11 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 	}
 	/* Allow view navigation??? */
 	/* note, this gives issues: 1) other modal ops run on top (border select), 2) middlemouse is used now 3) tablet/trackpad? */
-//	else {
-//		return OPERATOR_PASS_THROUGH;
-//	}
-
+	/* Solution : implement priority system */
+	else {
+		return OPERATOR_PASS_THROUGH;
+	}
+	
 	return OPERATOR_RUNNING_MODAL;
 }
 

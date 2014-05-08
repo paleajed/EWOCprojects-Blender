@@ -251,8 +251,8 @@ static void emDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm, unsigned char 
 	
 	glBegin(GL_POINTS);
 	iter = BLI_ghashIterator_new(em->presel_verts);
-	eve = BLI_ghashIterator_getKey(iter);
-	while (eve) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eve = BLI_ghashIterator_getKey(iter);
 		if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
 			glColor3ubv(sel_col);
 		}
@@ -266,7 +266,6 @@ static void emDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm, unsigned char 
 			glVertex3fv(eve->co);
 		}
 		BLI_ghashIterator_step(iter);
-		eve = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 	glEnd();	
@@ -354,8 +353,8 @@ static void emDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm, unsigned char 
 	
 	glBegin(GL_LINES);
 	iter = BLI_ghashIterator_new(em->presel_edges);
-	eed = BLI_ghashIterator_getKey(iter);
-	while (eed) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eed = BLI_ghashIterator_getKey(iter);
 		if (BM_elem_flag_test(eed, BM_ELEM_SELECT)) {
 			glColor3ubv(sel_col);
 		}
@@ -373,7 +372,6 @@ static void emDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm, unsigned char 
 		}
 		
 		BLI_ghashIterator_step(iter);
-		eed = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 	glEnd();	

@@ -80,8 +80,8 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em)
 	em_copy->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
 	em_copy->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
 
-	em_copy->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-	em_copy->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+	em_copy->prop3d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
+	em_copy->prop2d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
 
 	return em_copy;
 }

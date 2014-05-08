@@ -406,7 +406,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", false);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", false);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -414,7 +414,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", false);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", false);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_CTRL, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -422,7 +422,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", true);
 	RNA_boolean_set(kmi->ptr, "object", true); /* use Ctrl+Select for 2 purposes */
 	RNA_boolean_set(kmi->ptr, "enumerate", false);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_ALT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -430,7 +430,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", false);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", true);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 
 	/* selection key-combinations */
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT | KM_CTRL, 0);
@@ -440,7 +440,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", true);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", false);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_CTRL | KM_ALT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -448,7 +448,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", true);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", true);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT | KM_ALT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -456,7 +456,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", false);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", true);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_select", SELECTMOUSE, KM_PRESS, KM_SHIFT | KM_CTRL | KM_ALT, 0);
 	RNA_boolean_set(kmi->ptr, "extend", false);
 	RNA_boolean_set(kmi->ptr, "deselect", false);
@@ -464,7 +464,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
 	RNA_boolean_set(kmi->ptr, "center", true);
 	RNA_boolean_set(kmi->ptr, "object", false);
 	RNA_boolean_set(kmi->ptr, "enumerate", true);
-	RNA_boolean_set(kmi->ptr, "presel", FALSE);
+	RNA_boolean_set(kmi->ptr, "presel", false);
 
 	/* preselection*/
 	kmi = WM_keymap_add_item(keymap, "VIEW3D_OT_preselect", MOUSEMOVE, KM_ANY, 0, 0);

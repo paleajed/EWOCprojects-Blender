@@ -391,7 +391,7 @@ void RE_bake_pixels_populate_from_objects(
 		dm_highpoly[i] = CDDM_from_mesh(highpoly[i].me);
 
 		/* Create a bvh-tree for each highpoly object */
-		bvhtree_from_mesh_faces(&treeData[i], dm_highpoly[i], 0.0, 2, 6);
+		bvhtree_from_mesh_faces(&treeData[i], dm_highpoly[i], 0.0, 2, 6, false);
 
 		if (&treeData[i].tree == NULL) {
 			printf("Baking: Out of memory\n");

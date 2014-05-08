@@ -2012,7 +2012,7 @@ static void view_zoom_mouseloc(ARegion *ar, float dfac, int mx, int my)
 }
 
 
-static void viewzoom_apply(ViewOpsData *vod, const int xy[2], const short viewzoom, const short zoom_invert)
+static float viewzoom_apply(ViewOpsData *vod, const int xy[2], const short viewzoom, const short zoom_invert)
 {
 	float zfac = 1.0;
 	bool use_cam_zoom;
@@ -2160,6 +2160,7 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
 	RegionView3D *rv3d;
 	ScrArea *sa;
 	ARegion *ar;
+	float fac = 1.0f;
 	bool use_cam_zoom;
 
 	const int delta = RNA_int_get(op->ptr, "delta");

@@ -1650,14 +1650,13 @@ static void ccgDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm,
 	CCG_key_top_level(&key, ccgdm->ss);
 	
 	iter = BLI_ghashIterator_new(em->presel_verts);
-	eve = BLI_ghashIterator_getKey(iter);
-	while (eve) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eve = BLI_ghashIterator_getKey(iter);
 		indices[pos] = eve->head.index;
 		verts[pos] = eve;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		eve = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 
@@ -2769,14 +2768,13 @@ static void ccgDM_drawPreselFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char
 	int pos = 0;
 	
 	iter = BLI_ghashIterator_new(em->presel_faces);
-	efa = BLI_ghashIterator_getKey(iter);
-	while (efa) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		efa = BLI_ghashIterator_getKey(iter);
 		indices[pos] = efa->head.index;
 		faces[pos] = efa;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		efa = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 
@@ -2845,7 +2843,7 @@ static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned 
 {
 	GHashIterator *iter;
 	BMFace *efa;
-	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "ccgdm propfaceidxs to faces");
+	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_uinthash, BLI_ghashutil_intcmp, "ccgdm propfaceidxs to faces");
 	CCGDerivedMesh *ccgdm = (CCGDerivedMesh *) dm;
 	CCGSubSurf *ss = ccgdm->ss;
 	CCGKey key;
@@ -2855,14 +2853,13 @@ static void ccgDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned 
 	float alphafac = (float)prop_col[3] / 255.0f;
 	
 	iter = BLI_ghashIterator_new(em->prop3d_faces);
-	efa = BLI_ghashIterator_getKey(iter);
-	while (efa) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		efa = BLI_ghashIterator_getKey(iter);
 		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
 			BLI_ghash_insert(idxstofaces, efa->head.index, efa);
 		}
 	
 		BLI_ghashIterator_step(iter);
-		efa = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 
@@ -3057,14 +3054,13 @@ static void ccgDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm,
 	int pos = 0;
 	
 	iter = BLI_ghashIterator_new(em->presel_edges);
-	eed = BLI_ghashIterator_getKey(iter);
-	while (eed) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eed = BLI_ghashIterator_getKey(iter);
 		indices[pos] = eed->head.index;
 		edges[pos] = eed;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		eed = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 
@@ -3117,14 +3113,13 @@ static void ccgDM_drawPreselEdgesInterp(BMVert *eve, BMEditMesh *em, DerivedMesh
 	int pos = 0;
 	
 	iter = BLI_ghashIterator_new(em->presel_edges);
-	eed = BLI_ghashIterator_getKey(iter);
-	while (eed) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eed = BLI_ghashIterator_getKey(iter);
 		indices[pos] = eed->head.index;
 		edges[pos] = eed;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		eed = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 

@@ -3240,4 +3240,5 @@ void VIEW3D_OT_select_circle(wmOperatorType *ot)
 	RNA_def_int(ot->srna, "y", 0, INT_MIN, INT_MAX, "Y", "", INT_MIN, INT_MAX);
 	RNA_def_int(ot->srna, "radius", 0, INT_MIN, INT_MAX, "Radius", "", INT_MIN, INT_MAX);
 	RNA_def_int(ot->srna, "gesture_mode", 0, INT_MIN, INT_MAX, "Event Type", "", INT_MIN, INT_MAX);
+	RNA_def_int(ot->srna, "regionid", 0, INT_MIN, INT_MAX, "Region id", "", INT_MIN, INT_MAX);
 }

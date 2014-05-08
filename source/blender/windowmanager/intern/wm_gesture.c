@@ -74,10 +74,10 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
 	
 	WM_gestures_update_level(window);
 	
-	wm_subwindow_getorigin(window, gesture->swinid, &sx, &sy);
+	wm_subwindow_origin_get(window, gesture->swinid, &sx, &sy);
 	
-	if (ELEM5(type, WM_GESTURE_RECT, WM_GESTURE_CROSS_RECT, WM_GESTURE_TWEAK,
-	          WM_GESTURE_CIRCLE, WM_GESTURE_STRAIGHTLINE))
+	if (ELEM4(type, WM_GESTURE_RECT, WM_GESTURE_CROSS_RECT, WM_GESTURE_TWEAK,
+	          WM_GESTURE_STRAIGHTLINE))
 	{
 		rcti *rect = MEM_callocN(sizeof(rcti), "gesture rect new");
 		

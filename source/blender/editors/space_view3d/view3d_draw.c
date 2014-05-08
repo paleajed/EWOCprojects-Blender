@@ -3343,6 +3343,7 @@ static void view3d_main_area_draw_objects(const bContext *C, Scene *scene, View3
                                           ARegion *ar, const char **grid_unit)
 {
 	RegionView3D *rv3d = ar->regiondata;
+	Base *base;
 	unsigned int lay_used = v3d->lay_used;
 
 	/* shadow buffers, before we setup matrices */

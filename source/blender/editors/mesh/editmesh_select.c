@@ -3498,3 +3498,208 @@ void MESH_OT_loop_to_region(wmOperatorType *ot)
 
 
 /************************ Select Path Operator *************************/
+
+
+
+
+
+
+/* -------------------- preselection --------------------------------------------- */
+
+void EDBM_create_prop_presel(wmWindowManager *wm, bScreen *screen, ScrArea *sa, bool draw)
+{
+	/* sets alpha for proportional preselection */
+	/* uses the transform code: to avoid much code duplication */
+	
+	/* todo mirror */
+	ToolSettings *ts = screen->scene->toolsettings;
+	TransInfo *t = MEM_callocN(sizeof(TransInfo), "TransInfo data");
+	GHash *temp_elems = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "temp_elems");
+	GHash *temp_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "temp_faces");
+	GHashIterator *ghiter;
+	BMEditMesh *em;
+	BMIter iter;
+	BMFace *efa;
+	BMLoop *loop;
+	unsigned short median;
+	unsigned char alpha;
+	int elem_count = 0;
+	int pos = 0;
+	int i;
+	ARegion *ar;
+	View3D *v3d = sa->spacedata.first;
+	bContext *C = CTX_create();
+	
+	if (!screen->scene->obedit) {
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	if (!(screen->scene->obedit->type == OB_MESH)) {
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	em = BKE_editmesh_from_object(screen->scene->obedit);
+	if ((!screen->scene->toolsettings->use_prop_presel) || (ts->proportional == PROP_EDIT_OFF)) {
+		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+		BLI_ghash_free(temp_elems, NULL, NULL);
+		BLI_ghash_free(temp_faces, NULL, NULL);
+		CTX_free(C);
+		MEM_freeN(t);
+		return;
+	}
+	
+	for (ar = sa->regionbase.first; ar; ar = ar->next) {
+		if (ar->regiontype == RGN_TYPE_WINDOW) {
+			t->ar = ar;
+			break;
+		}
+	}
+	
+	CTX_wm_screen_set(C, screen);
+	CTX_wm_area_set(C, sa);
+	CTX_data_scene_set(C, screen->scene);
+		
+	t->scene = screen->scene;
+	t->spacetype = sa->spacetype;
+	t->obedit = screen->scene->obedit;
+	
+	if (t->spacetype == SPACE_IMAGE) {
+		if (!(ts->uv_flag & UV_SYNC_SELECTION)) {
+			if (em->bm->totfacesel == 0) {
+				BLI_ghash_free(temp_elems, NULL, NULL);
+				BLI_ghash_free(temp_faces, NULL, NULL);
+				BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+				CTX_free(C);
+				MEM_freeN(t);
+				return;
+			}
+		}
+	}
+	
+	switch (ts->proportional) {
+		case PROP_EDIT_ON:
+			t->flag |= T_PROP_EDIT;
+			break;
+		case PROP_EDIT_CONNECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_CONNECTED;
+			break;
+		case PROP_EDIT_PROJECTED:
+			t->flag |= T_PROP_EDIT | T_PROP_PROJECTED;
+			break;
+	}
+	t->prop_mode = ts->prop_mode;
+	t->prop_size = ts->proportional_size;
+	
+	createTransData(C, t);
+	calculatePropRatio(t);
+	/* Make vert list with alpha based on proportional factor */
+	for(i = 0; i < t->total; i++) {
+		if (t->data[i].factor > 0) {
+			elem_count++;
+		}
+	}
+	for(i = 0; i < t->total; i++) {
+		alpha = (char)(t->data[i].factor * 125.0);
+		if (alpha > 0) {
+			alpha *= 0.8;
+			BLI_ghash_insert(temp_elems, t->data[i].elem, alpha);
+			pos++;
+		}
+	}
+	
+	/* Make face list with alpha interpolated from face-elems */
+	if (t->spacetype == SPACE_VIEW3D) {
+		BLI_ghash_clear(em->prop3d_faces, NULL, NULL);
+		for(i = 0; i < t->total; i++) {
+			BM_ITER_ELEM (efa, &iter, (BMVert *)t->data[i].elem, BM_FACES_OF_VERT) {
+				if (!BLI_ghash_haskey(temp_faces, efa)) {
+					BLI_ghash_insert(temp_faces, efa, NULL);
+				}
+			}
+		}
+	}
+	else if (t->spacetype == SPACE_IMAGE) {
+		BLI_ghash_clear(em->prop2d_faces, NULL, NULL);
+		for(i = 0; i < t->total; i++) {
+			efa = ((BMLoop *)t->data[i].elem)->f;
+			if (!BLI_ghash_haskey(temp_faces, efa)) {
+				BLI_ghash_insert(temp_faces, efa, NULL);
+			}
+		}
+	}
+	
+	pos = 0;
+	ghiter = BLI_ghashIterator_new(temp_faces);
+	while (!(BLI_ghashIterator_done(ghiter))) {
+		efa = BLI_ghashIterator_getKey(ghiter);
+		median = 0;
+		loop = efa->l_first;
+		for (i = 0; i < efa->len; i++) {
+			if (t->spacetype == SPACE_VIEW3D) {
+				if (BLI_ghash_haskey(temp_elems, loop->v)) {
+					alpha = (char)BLI_ghash_lookup(temp_elems, loop->v);
+					if (alpha) median += alpha;
+				}
+				else if (ts->prop_mode == PROP_CONST) {
+					median = 0;
+					break;
+				}
+			}
+			else if (t->spacetype == SPACE_IMAGE) {
+				if (BLI_ghash_haskey(temp_elems, loop)) {
+					alpha = (char)BLI_ghash_lookup(temp_elems, loop);
+					if (alpha) median += alpha;
+				}
+				else if (ts->prop_mode == PROP_CONST) {
+					median = 0;
+					break;
+				}
+			}
+			loop = loop->next;
+		}
+		median /= efa->len;
+		if (median > 0) {
+			if (t->spacetype == SPACE_VIEW3D) {
+				BLI_ghash_insert(em->prop3d_faces, efa, (unsigned char)median);
+			}
+			else if (t->spacetype == SPACE_IMAGE) {
+				BLI_ghash_insert(em->prop2d_faces, efa, (unsigned char)median);
+			}
+			pos++;
+		}
+		BLI_ghashIterator_step(ghiter);
+	}
+	BLI_ghashIterator_free(ghiter);
+	
+	if (draw && !ar->propcircle_handle) {
+		t->flag |= T_PROP_EDIT;
+		t->around = v3d->around;
+		t->sa = sa;
+		t->ar = ar;
+		t->view = v3d;
+		calculateCenter(t);
+		t->prop_size = ts->proportional_size;
+		ar->propcircle_handle = ED_region_draw_cb_activate(t->ar->type, drawPreselPropCircle, t, REGION_DRAW_POST_VIEW);
+	}
+	else {
+		if (t->data)
+			MEM_freeN(t->data);
+		if (t->spacetype == SPACE_IMAGE) {
+			if (t->data2d)
+				MEM_freeN(t->data2d);
+		}
+		MEM_freeN(t);
+	}
+		
+	BLI_ghash_free(temp_elems, NULL, NULL);
+	BLI_ghash_free(temp_faces, NULL, NULL);
+	CTX_free(C);
+	WM_main_add_notifier(NC_GEOM | ND_PRESELECT, NULL);
+}

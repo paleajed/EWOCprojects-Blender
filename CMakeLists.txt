@@ -1150,7 +1150,7 @@ elseif(WIN32)
 				message(WARNING "Using HARDCODED ffmpeg locations")
 				# MSVC11 FFMPEG libs are newer
 				if(MSVC11)
-					set(FFMPEG_LIBRARY_VERSION 54)
+					set(FFMPEG_LIBRARY_VERSION 55)
 					set(FFMPEG_LIBRARY_VERSION_AVU 52)
 				else()
 					set(FFMPEG_LIBRARY_VERSION 55)

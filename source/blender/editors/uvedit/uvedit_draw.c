@@ -640,8 +640,8 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 		
 		glEnable(GL_BLEND);
 		ghiter = BLI_ghashIterator_new(em->prop2d_faces);
-		efa = BLI_ghashIterator_getKey(ghiter);
-		while (efa) {
+		while (!(BLI_ghashIterator_done(ghiter))) {
+			efa = BLI_ghashIterator_getKey(ghiter);
 			prop_col[3] = (char)BLI_ghash_lookup(em->prop2d_faces, efa);
 			glColor4ubv(prop_col);
 			/* draw face */
@@ -653,7 +653,6 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 			glEnd();
 			
 			BLI_ghashIterator_step(ghiter);
-			efa = BLI_ghashIterator_getKey(ghiter);
 		}
 		BLI_ghashIterator_free(ghiter);
 		glDisable(GL_BLEND);
@@ -666,8 +665,8 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 		
 		glEnable(GL_BLEND);
 		ghiter = BLI_ghashIterator_new(em->presel_faces);
-		efa = BLI_ghashIterator_getKey(ghiter);
-		while (efa) {
+		while (!(BLI_ghashIterator_done(ghiter))) {
+			efa = BLI_ghashIterator_getKey(ghiter);
 			if (BM_elem_flag_test(efa, BM_ELEM_TAG)) {
 				glColor4ubv(sel_col);
 				if (ts->uv_flag & UV_SYNC_SELECTION) {
@@ -694,7 +693,6 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 				
 			}
 			BLI_ghashIterator_step(ghiter);
-			efa = BLI_ghashIterator_getKey(ghiter);
 		}
 		BLI_ghashIterator_free(ghiter);
 		glDisable(GL_BLEND);
@@ -847,8 +845,8 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 		UI_GetThemeColor4ubv(TH_PRESEL_NOSELECT, nosel_col);
 		
 		ghiter = BLI_ghashIterator_new(em->presel_edges);
-		eed = BLI_ghashIterator_getKey(ghiter);
-		while (eed) {
+		while (!(BLI_ghashIterator_done(ghiter))) {
+			eed = BLI_ghashIterator_getKey(ghiter);
 			if (ts->uv_flag & UV_SYNC_SELECTION) {
 				cond = BM_elem_flag_test(eed, BM_ELEM_SELECT);
 			}
@@ -902,7 +900,6 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 			}
 			
 			BLI_ghashIterator_step(ghiter);
-			eed = BLI_ghashIterator_getKey(ghiter);
 		}
 		BLI_ghashIterator_free(ghiter);
 	}
@@ -1019,8 +1016,8 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 		
 			glBegin(GL_POINTS);
 			ghiter = BLI_ghashIterator_new(em->presel_verts);
-			eve = BLI_ghashIterator_getKey(ghiter);
-			while (eve) {
+			while (!(BLI_ghashIterator_done(ghiter))) {
+				eve = BLI_ghashIterator_getKey(ghiter);
 				BM_ITER_ELEM (efa, &iter, eve, BM_FACES_OF_VERT) {
 					if (BM_elem_flag_test(efa, BM_ELEM_TAG)) {
 						BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
@@ -1042,7 +1039,6 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit)
 					}
 				}
 				BLI_ghashIterator_step(ghiter);
-				eve = BLI_ghashIterator_getKey(ghiter);
 			}
 			BLI_ghashIterator_free(ghiter);
 			glEnd();

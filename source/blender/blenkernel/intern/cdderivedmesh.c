@@ -1138,14 +1138,13 @@ static void cdDM_drawPreselFaces(BMEditMesh *em, DerivedMesh *dm, unsigned char 
 	}
 
 	iter = BLI_ghashIterator_new(em->presel_faces);
-	efa = BLI_ghashIterator_getKey(iter);
-	while (efa) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		efa = BLI_ghashIterator_getKey(iter);
 		indices[pos] = efa->head.index;
 		faces[pos] = efa;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		efa = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 	
@@ -1198,7 +1197,7 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	CDDerivedMesh *cddm = (CDDerivedMesh *) dm;
 	MVert *mv = cddm->mvert;
 	MFace *mf = cddm->mface;
-	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "cddm propfaceidxs to faces");
+	GHash *idxstofaces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "cddm propfaceidxs to faces");
 	GHashIterator *iter;
 	BMFace *efa;
 	int i, orig;
@@ -1213,14 +1212,13 @@ static void cdDM_drawPreselPropFaces(BMEditMesh *em, DerivedMesh *dm, unsigned c
 	}
 
 	iter = BLI_ghashIterator_new(em->prop3d_faces);
-	efa = (BMFace *)BLI_ghashIterator_getKey(iter);
-	while (efa) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		efa = (BMFace *)BLI_ghashIterator_getKey(iter);
 		if (BM_elem_flag_test(efa, BM_ELEM_SELECT) == selected) {
 			BLI_ghash_insert(idxstofaces, efa->head.index, efa);
 		}
 	
 		BLI_ghashIterator_step(iter);
-		efa = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 	
@@ -1875,14 +1873,13 @@ static void cdDM_drawPreselEdges(BMEditMesh *em, DerivedMesh *dm,
 	int pos = 0;
 	
 	iter = BLI_ghashIterator_new(em->presel_edges);
-	eed = BLI_ghashIterator_getKey(iter);
-	while (eed) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eed = BLI_ghashIterator_getKey(iter);
 		indices[pos] = eed->head.index;
 		edges[pos] = eed;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		eed = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 
@@ -1959,14 +1956,13 @@ static void cdDM_drawPreselVerts(BMEditMesh *em, DerivedMesh *dm,
 	int pos = 0;
 	
 	iter = BLI_ghashIterator_new(em->presel_verts);
-	eve = BLI_ghashIterator_getKey(iter);
-	while (eve) {
+	while (!(BLI_ghashIterator_done(iter))) {
+		eve = BLI_ghashIterator_getKey(iter);
 		indices[pos] = eve->head.index;
 		verts[pos] = eve;
 		pos++;
 	
 		BLI_ghashIterator_step(iter);
-		eve = BLI_ghashIterator_getKey(iter);
 	}
 	BLI_ghashIterator_free(iter);
 

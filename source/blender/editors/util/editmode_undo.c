@@ -38,6 +38,7 @@
 #include "DNA_object_types.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_blender.h"
@@ -256,8 +257,8 @@ void undo_editmode_step(bContext *C, int step)
 			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
 			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
 	
-			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
 		}
 	}
 	else if (step == 1) {
@@ -278,8 +279,8 @@ void undo_editmode_step(bContext *C, int step)
 			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
 			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
 
-			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
 
 		}
 	}
@@ -300,8 +301,8 @@ void undo_editmode_step(bContext *C, int step)
 			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
 			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
 
-			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
 
 			curundo = curundo->next;
 			if (G.debug & G_DEBUG) printf("redo %s\n", curundo->name);

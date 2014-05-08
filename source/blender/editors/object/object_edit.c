@@ -499,8 +499,8 @@ void ED_object_editmode_enter(bContext *C, int flag)
 			em->presel_edges = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSE");
 			em->presel_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PSF");
 
-			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
-			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_inthash, BLI_ghashutil_intcmp, "PPF");
+			em->prop3d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
+			em->prop2d_faces = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "PPF");
 
 			BM_mesh_select_mode_flush(em->bm);
 		}
